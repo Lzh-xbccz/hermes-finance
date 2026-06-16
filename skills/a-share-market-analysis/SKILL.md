@@ -2,8 +2,8 @@
 name: a-share-market-analysis
 
 > ⛔ 铁律：你不是在写行情播报，你是在做法医解剖。每句话必须回答"为什么"。禁止"可能""或许""值得关注"。每个数据必须有对比基准。每个判断必须有因果链。
-description: "中国A股行情分析：六维一体（技术面 + 资金面 + 市场结构 + 情绪面 + 宏观面 + 板块轮动），东方财富/新浪/腾讯免费 API 一键出报告。"
-version: 2.0.0
+description: "中国A股行情分析：六维一体 + Sequoia-X 7策略量化选股 + baostock免费数据源。自动扫描全市场5200只A股，收盘后推送结果。"
+version: 3.0.0
 author: 李小白菜吃猪 + Hermes
 metadata:
   hermes:
@@ -13,7 +13,38 @@ metadata:
 
 # 中国 A 股行情分析
 
-六维一体分析框架，与加密分析技能（crypto-market-analysis）互补。基于海外服务器持续实测结果调整：
+> 🆕 v3.0 — 集成 [Sequoia-X](https://github.com/sngyai/Sequoia-X) 7策略量化选股引擎
+
+## 量化选股（a_share_scanner.py）
+
+基于 baostock 免费数据源，收盘后自动扫描全市场 5200+ 只 A 股：
+
+```bash
+# 首次：回填历史数据 (~12分钟)
+python a_share_scanner.py --backfill
+
+# 日常：增量更新 + 7策略扫描
+python a_share_scanner.py
+
+# 仅跑特定策略
+python a_share_scanner.py --strategy turtle
+```
+
+| 策略 | 说明 |
+|------|------|
+| 海龟突破 | 20日新高 + 成交额过亿 + 防诱多阳线 |
+| 均线放量 | 均线多头排列 + 放量突破 |
+| 高窄旗形 | 强动量后极度收敛缩量 |
+| 涨停洗盘 | 涨停后回踩确认 |
+| 跌停反包 | 上升趋势中跌停后的反包 |
+| RPS突破 | 欧奈尔相对强度突破 |
+| 定增回补 | 定增破发后的回补机会 |
+
+数据源：**baostock**（免费、无需注册、后复权）→ 本地 SQLite，彻底规避东方财富反爬。
+
+---
+
+## 六维分析框架
 
 | # | 维度 | 核心关注 | 数据源 | 状态 |
 |---|------|---------|--------|------|
