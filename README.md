@@ -8,6 +8,14 @@
 
 ---
 
+### 🎉 v1.0.0 正式发布 (2026-06-17)
+
+15 项修复，涵盖代码健壮性 + 分析逻辑。加密宏观模块从空壳变为真正拉 VIX/DXY/SPY 数据；
+缠论共振从单一笔方向升级为四层综合评分；外汇新增利率差模块；CFTC 解析全面加固。
+详见 [CHANGELOG.md](CHANGELOG.md)。
+
+---
+
 ## 🏗️ 项目架构
 
 ```\nhermes-finance/\n├── requirements.txt             # Python 依赖（含 czsc GitHub 源）\n├── install.sh                   # 一键安装脚本\n├── skills/                      # 8 个分析技能

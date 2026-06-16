@@ -1,0 +1,29 @@
+# Changelog
+
+## v1.0.0 (2026-06-17) — 首次正式发布 🎉
+
+基于 czsc v1.0 缠论库，覆盖加密货币、商品期货、外汇、A股、美股五大市场的多维分析框架。
+
+### 🔴 严重修复
+
+- **`forex_fetch.py`** — 补上缺失的 `import time`，HTTP 429 限流重试不再抛 `NameError` 崩溃
+- **`market_analyze.py`** — 硬编码 `/root/.hermes/` 路径全部改为基于 `__file__` 的项目相对路径
+- **`feishu.py`** — `_get_stock_names` 加 `try/finally`，baostock 异常不再泄漏登录会话
+- **`market_analyze.py`** — 删除 `ANALYZE_SCRIPTS` 死代码（引用的 4 个文件根本不存在且从未被调用）
+- **`block_macro`** — 不再是空壳打印占位文字，真正拉取 VIX/DXY/SPY 实时数据，并输出 BTC-SPY 联动判断
+- **`akshare`** — 补入 `requirements.txt` 和 `install.sh`，`PrivatePlacementStrategy` 不再静默失败
+
+### 🟡 分析逻辑改进
+
+- **`resonance_check`（缠论共振）** — 从仅看笔方向，重写为四层判断：笔方向 + 中枢位置 + 中枢嵌套关系 + 综合评分（-5~+5）
+- **`forex_fetch.py`（利率差）** — 新增 US 10Y/2Y 利差获取、DXY 趋势、央行事件自动筛选
+- **CFTC 持仓解析** — 搜索窗口 1600→3000 字符，增加 4 种段落标记容错，输出仓位多空信号
+
+### 🟡 代码质量
+
+- `czsc-ccxt` / `crypto` 两个 `czsc_analyze.py` — 硬编码未来日期（2026-03-18 等）改为 `datetime.now()` 动态计算
+- `crypto/fetch_data.py` — 删除未被调用的 `block_macro_enhanced` 死函数
+- `install.sh` — 补全 `baostock`/`pydantic-settings`/`rich`/`python-dotenv` 4 个依赖
+- `scripts/czsc_analyze.py` — 替换 `czsc._native.signals.call_signal` 私有 API 为 `czsc.signals` 公开导入
+- `market_analyze.py` — 去掉 `tavily_supplement` 的 `sys.path.insert` 魔法路径
+- `DataEngine` — SQLite 连接复用，5200+ 只股票遍历不再每次新建连接
