@@ -2,6 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-v1.0.0-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 > 基于 [czsc](https://github.com/waditu/czsc) v1.0 缠论库，覆盖 **加密货币/商品期货/外汇/A股/美股** 五大市场。每个市场采用多维因果分析框架，集成缠论作为核心技术分析维度。
 
@@ -241,6 +242,26 @@ K线: 454 | BI: 31 | FX: 153 | 中枢: $63,650-$64,183 (强)
 方向: 🟢 偏多 | 入场: $64,000-$65,500
 SL: $62,900 | TP1: $67,248 | TP2: $70,000
 ```
+
+---
+
+---
+
+## 📋 更新日志
+
+### v1.0.0 (2026-06-16)
+
+首次正式版本发布。8 项 bug 修复：
+
+| 严重度 | 修复内容 |
+|--------|---------|
+| 🔴 | `forex_fetch.py` 补上缺失的 `import time`，429 限流重试不再崩 |
+| 🔴 | `market_analyze.py` 硬编码 `/root/.hermes/` 路径改为项目相对路径 |
+| 🟡 | `czsc-ccxt` / `crypto` 两个 `czsc_analyze.py` 硬编码未来日期改为动态计算 |
+| 🟡 | `fetch_data.py` 删除从未被调用的 `block_macro_enhanced` 死代码 |
+| 🟡 | `install.sh` 补全 `baostock` / `pydantic-settings` / `rich` / `python-dotenv` 依赖 |
+| 🟡 | `scripts/czsc_analyze.py` 替换 `czsc._native.signals.call_signal` 私有 API 为 `czsc.signals` 公开导入 |
+| 🟡 | `market_analyze.py` 去掉 `tavily_supplement` 里的魔法路径注入 |
 
 ---
 
