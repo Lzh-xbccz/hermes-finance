@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Any
 
 from czsc.connectors.ccxt_connector import get_raw_bars
 from czsc import CZSC, format_standard_kline, Freq, RawBar
-from czsc._native.signals import call_signal
+from czsc.signals import cxt_first_buy_V221126, cxt_decision_V240614, cxt_bi_end_V230104
 
 # ══════════════════════════════════════════════════
 # CONFIG
@@ -33,10 +33,10 @@ PERIOD_MAP: Dict[str, str] = {
     '1d': '1d', '1w': '1w',
 }
 
-SIGNAL_NAMES = {
-    '一买': 'cxt_first_buy_V221126',
-    '综合决策': 'cxt_decision_V240614',
-    '笔结束': 'cxt_bi_end_V230104',
+SIGNAL_FUNCS = {
+    '一买': cxt_first_buy_V221126,
+    '综合决策': cxt_decision_V240614,
+    '笔结束': cxt_bi_end_V230104,
 }
 
 DEFAULT_FREQS = ['4h', '15m']
@@ -85,11 +85,11 @@ class FreqAnalysis:
         # 当前价
         self.cur_price = bars[-1].close if bars else 0
         
-        # 信号
+        # 信号（直接调用公开的 czsc.signals 函数）
         self.signals: Dict[str, List[Any]] = {}
-        for name, sig_name in SIGNAL_NAMES.items():
+        for name, sig_func in SIGNAL_FUNCS.items():
             try:
-                res = call_signal(sig_name, self.c)
+                res = sig_func(self.c)
                 if res:
                     self.signals[name] = res
             except Exception:

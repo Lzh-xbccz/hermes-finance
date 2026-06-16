@@ -16,22 +16,22 @@
 """
 import argparse, json, subprocess, sys, os
 
-SKILL_BASE = "/root/.hermes/skills/research"
-SCRIPTS_BASE = "/root/.hermes/scripts"
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SKILL_BASE = os.path.join(_PROJECT_ROOT, "skills")
 
 MARKET_SCRIPTS = {
-    "crypto": f"{SKILL_BASE}/crypto-market-analysis/scripts/fetch_data.py",
-    "a-share": f"{SKILL_BASE}/a-share-market-analysis/scripts/a_share_fetch.py",
-    "futures": f"{SKILL_BASE}/futures-market-analysis/scripts/futures_fetch.py",
-    "forex": f"{SKILL_BASE}/forex-market-analysis/scripts/forex_fetch.py",
-    "us-equity": f"{SKILL_BASE}/us-equity-market-analysis/scripts/us_equity_fetch.py",
+    "crypto": os.path.join(SKILL_BASE, "crypto-market-analysis", "scripts", "fetch_data.py"),
+    "a-share": os.path.join(SKILL_BASE, "a-share-market-analysis", "scripts", "a_share_fetch.py"),
+    "futures": os.path.join(SKILL_BASE, "futures-market-analysis", "scripts", "futures_fetch.py"),
+    "forex": os.path.join(SKILL_BASE, "forex-market-analysis", "scripts", "forex_fetch.py"),
+    "us-equity": os.path.join(SKILL_BASE, "us-equity-market-analysis", "scripts", "us_equity_fetch.py"),
 }
 
 ANALYZE_SCRIPTS = {
-    "a-share": f"{SCRIPTS_BASE}/a_share_analyze.py",
-    "futures": f"{SKILL_BASE}/futures-market-analysis/scripts/futures_analyze.py",
-    "forex": f"{SKILL_BASE}/forex-market-analysis/scripts/forex_analyze.py",
-    "us-equity": f"{SKILL_BASE}/us-equity-market-analysis/scripts/us_equity_analyze.py",
+    "a-share": os.path.join(_PROJECT_ROOT, "scripts", "a_share_analyze.py"),
+    "futures": os.path.join(SKILL_BASE, "futures-market-analysis", "scripts", "futures_analyze.py"),
+    "forex": os.path.join(SKILL_BASE, "forex-market-analysis", "scripts", "forex_analyze.py"),
+    "us-equity": os.path.join(SKILL_BASE, "us-equity-market-analysis", "scripts", "us_equity_analyze.py"),
 }
 
 
@@ -39,7 +39,7 @@ def run_script(cmd, timeout=120):
     """运行脚本并返回输出"""
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, cwd="/root"
+            cmd, capture_output=True, text=True, timeout=timeout
         )
         if result.stdout:
             return result.stdout
@@ -136,7 +136,6 @@ def fetch_us_equity(symbol):
 
 def tavily_supplement(market, symbol):
     """用Tavily搜索补充最新新闻/事件"""
-    sys.path.insert(0, SCRIPTS_BASE)
     try:
         from tavily_client import tavily_batch_search
     except ImportError:

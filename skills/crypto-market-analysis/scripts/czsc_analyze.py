@@ -10,7 +10,7 @@
 """
 
 import sys, argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import ccxt
 from czsc import CZSC, RawBar, Freq
 
@@ -28,7 +28,7 @@ def fetch_bars(symbol, freq_key):
     """拉取K线并转为RawBar列表"""
     freq, interval, limit, _ = FREQ_MAP[freq_key]
     exchange = ccxt.binance({'enableRateLimit': True})
-    since = exchange.parse8601('2026-01-01T00:00:00Z')
+    since = exchange.parse8601((datetime.now(timezone.utc) - timedelta(days=limit)).strftime('%Y-%m-%dT00:00:00Z'))
     symbol_ccxt = f'{symbol}/USDT'
     bars = exchange.fetch_ohlcv(symbol_ccxt, interval, since=since, limit=limit)
     

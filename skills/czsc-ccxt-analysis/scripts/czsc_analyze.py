@@ -7,17 +7,22 @@
 """
 import sys, ccxt
 from czsc import CZSC, RawBar, Freq
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 symbol = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('--') else 'ZEC/USDT'
 compact = '--compact' in sys.argv
 
 exchange = ccxt.binance({'enableRateLimit': True})
 
-# Fetch data
-bars_d = exchange.fetch_ohlcv(symbol, '1d', since=exchange.parse8601('2026-03-18T00:00:00Z'), limit=90)
-bars_1h = exchange.fetch_ohlcv(symbol, '1h', since=exchange.parse8601('2026-05-17T00:00:00Z'), limit=720)
-bars_15m = exchange.fetch_ohlcv(symbol, '15m', since=exchange.parse8601('2026-06-12T00:00:00Z'), limit=480)
+# Fetch data — dynamic lookback windows
+now = datetime.now(timezone.utc)
+since_d = exchange.parse8601((now - timedelta(days=90)).strftime('%Y-%m-%dT00:00:00Z'))
+since_1h = exchange.parse8601((now - timedelta(days=30)).strftime('%Y-%m-%dT00:00:00Z'))
+since_15m = exchange.parse8601((now - timedelta(days=5)).strftime('%Y-%m-%dT00:00:00Z'))
+
+bars_d = exchange.fetch_ohlcv(symbol, '1d', since=since_d, limit=90)
+bars_1h = exchange.fetch_ohlcv(symbol, '1h', since=since_1h, limit=720)
+bars_15m = exchange.fetch_ohlcv(symbol, '15m', since=since_15m, limit=480)
 
 print(f"标的: {symbol} | 数据: 日线{len(bars_d)}根 | 1H{len(bars_1h)}根 | 15min{len(bars_15m)}根")
 print(f"当前价: ${bars_d[-1][4]:.1f} (日线) | ${bars_1h[-1][4]:.1f} (1H)\n")

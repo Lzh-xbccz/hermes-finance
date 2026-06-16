@@ -465,31 +465,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# ─── 块8: 宏观补充（替代Yahoo，避免429）───
-def block_macro_enhanced(coin_id):
-    """用免费API获取VIX/DXY/SPY，不依赖Yahoo Finance"""
-    print('\n=== 宏观补充(免费源) ===')
-    
-    # 方法: 用 Tavily 搜索实时数据
-    import sys as _sys
-    _sys.path.insert(0, '/root/.hermes/scripts')
-    try:
-        from tavily_client import tavily_batch_search
-        results = tavily_batch_search([
-            "VIX index current value today",
-            "DXY dollar index current price",
-            "S&P 500 SPY current price today",
-        ], search_depth="fast", max_results=3)
-        
-        import re
-        for q, r in results.items():
-            answer = r.get("answer", "")
-            if answer:
-                # 提取数字
-                nums = re.findall(r'(\d+\.?\d*)', answer[:200])
-                label = "VIX" if "VIX" in q else "DXY" if "DXY" in q else "SPY"
-                if nums:
-                    print(f'{label}: {nums[0]} (via Tavily)')
-    except Exception as e:
-        print(f'⚠️ 宏观补充失败: {e}')

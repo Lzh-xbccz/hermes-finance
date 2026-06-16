@@ -10,6 +10,7 @@ fi
 echo "📦 安装 Python 依赖..."
 pip install --break-system-packages git+https://github.com/waditu/czsc.git
 pip install --break-system-packages ccxt pandas plotly
+pip install --break-system-packages baostock pydantic-settings rich python-dotenv
 
 echo "✅ 验证安装..."
 python3 -c "import czsc; print(f'czsc {czsc.__version__}')"
