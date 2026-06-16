@@ -341,12 +341,12 @@ def block_macro(coin_id):
     # ── 传统市场联动 ──
     print('\n--- 美股/VIX/DXY ---')
     for label, key, fmt, thresholds in [
-        ('VIX', 'vix', '{:.1f}', ('🔴恐慌>25', 25, '🟢平静<15', 15)),
-        ('DXY', 'dxy', '{:.2f}', ('🟢>105 risk-off', 105, '🔴<100 risk-on', 100)),
-        ('SPY', 'spy', '{:.2f}', ('', 0, '', 0)),  # 只展示涨跌
+        ('VIX', 'vix', '.1f', ('🔴恐慌>25', 25, '🟢平静<15', 15)),
+        ('DXY', 'dxy', '.2f', ('🟢>105 risk-off', 105, '🔴<100 risk-on', 100)),
+        ('SPY', 'spy', '.2f', ('', 0, '', 0)),  # 只展示涨跌
     ]:
         r = results.get(key)
-        if r and r['price']:
+        if r and r['price'] is not None:
             chg_str = f"{r['change_pct']:+.1f}%"
             high_tag, high_val, low_tag, low_val = thresholds
             if key == 'vix':

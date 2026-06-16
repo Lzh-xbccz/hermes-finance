@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Any
 
 from czsc.connectors.ccxt_connector import get_raw_bars
 from czsc import CZSC, format_standard_kline, Freq, RawBar
-from czsc.signals import cxt_first_buy_V221126, cxt_decision_V240614, cxt_bi_end_V230104
+from czsc.signals import cxt_first_buy_V221126, cxt_second_bs_V230320, cxt_third_buy_V230228, cxt_decision_V240614, cxt_bi_end_V230104
 
 # ══════════════════════════════════════════════════
 # CONFIG
@@ -35,6 +35,8 @@ PERIOD_MAP: Dict[str, str] = {
 
 SIGNAL_FUNCS = {
     '一买': cxt_first_buy_V221126,
+    '二买': cxt_second_bs_V230320,
+    '三买': cxt_third_buy_V230228,
     '综合决策': cxt_decision_V240614,
     '笔结束': cxt_bi_end_V230104,
 }
@@ -127,8 +129,8 @@ class FreqAnalysis:
     def summary(self) -> str:
         """单行摘要"""
         bi = self.c.bi_list[-1] if self.c.bi_list else None
-        bi_str = f"BI#{self.n_bi} {self.last_bi_dir} {bi.power:+.0f}%" if bi else "无笔"
-        zs_str = f"ZS ${self.zs_low:.2f}-${self.zs_high:.2f} {self.zs_position}" if self.zs_fxs else "无中枢"
+        bi_str = f"BI#{self.n_bi} {self.last_bi_dir} {bi.power*100:+.0f}%" if bi else "无笔"
+        zs_str = f"ZS ${self.zs_low:.4f}-${self.zs_high:.4f} {self.zs_position}" if self.zs_fxs else "无中枢"
         return f"{self.freq_key:>4s}: {self.n_klines}K {self.n_bi}笔 | {bi_str} | {zs_str}"
 
 
@@ -285,7 +287,7 @@ class MultiFreqAnalysis:
             lines.append(f"- K 线: {fa.n_klines} | 分型: {fa.n_fx} | 笔: {fa.n_bi} | UBI: {fa.n_ubi}")
             
             if fa.zs_fxs:
-                lines.append(f"- **中枢**: ${fa.zs_low:.2f} — ${fa.zs_high:.2f} | 力度: {fa.zs_power} | 位置: {fa.zs_position}")
+                lines.append(f"- **中枢**: ${fa.zs_low:.4f} — ${fa.zs_high:.4f} | 力度: {fa.zs_power} | 位置: {fa.zs_position}")
             else:
                 lines.append(f"- **中枢**: 无")
             
@@ -304,8 +306,8 @@ class MultiFreqAnalysis:
                     idx = fa.c.bi_list.index(bi) + 1
                     lines.append(
                         f"| BI#{idx} | {bi.direction.value} | "
-                        f"${bi.fx_a.fx:.2f} | ${bi.fx_b.fx:.2f} | "
-                        f"{bi.power:+.1f}% |"
+                        f"${bi.fx_a.fx:.4f} | ${bi.fx_b.fx:.4f} | "
+                        f"{bi.power*100:+.1f}% |"
                     )
             lines.append("")
         

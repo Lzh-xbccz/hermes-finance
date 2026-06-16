@@ -17,6 +17,11 @@ python3 -c "import czsc; print(f'czsc {czsc.__version__}')"
 python3 -c "from czsc.connectors.ccxt_connector import get_raw_bars; print('get_raw_bars ✅')"
 python3 -c "from czsc import CZSC, Freq; print(f'Freq.F240={Freq.F240}')"
 
+echo "🔗 安装 czsc.signals 兼容层（v1.0.0rc8 无此模块）..."
+CZSC_DIR=$(python3 -c "import czsc, os; print(os.path.dirname(czsc.__file__))")
+cp czsc_signals_compat.py "$CZSC_DIR/signals.py"
+python3 -c "from czsc.signals import cxt_first_buy_V221126; print('czsc.signals ✅')"
+
 echo ""
 echo "🚀 安装完成！试试:"
 echo "  python scripts/czsc_analyze.py BTCUSDT 4h --signals"
