@@ -177,28 +177,77 @@ def extract_cftc_block(symbol: str) -> Dict[str, Any]:
     if not spec:
         return {}
     url, market = spec
-    html = fetch_text(url)
+    try:
+        html = fetch_text(url)
+    except Exception:
+        return {"source": url, "market": market, "found": False, "error": "fetch failed"}
     idx = html.upper().find(market.upper())
     if idx < 0:
-        return {"source": url, "market": market, "found": False}
-    block = html[idx:idx + 1600]
+        return {"source": url, "market": market, "found": False, "error": "market not in page"}
+    # 窗口从 1600 扩到 3000，避免市场名出现在靠后位置时截断
+    block = html[idx:idx + 3000]
     out = {"source": url, "market": market, "found": True}
-    if "FUTURES ONLY POSITIONS AS OF" in block:
-        out["report_type"] = "futures_only"
-        out["raw_excerpt"] = block[:900]
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-        oi_line = next((ln for ln in lines if "OPEN INTEREST:" in ln), "")
-        commit_idx = next((i for i, ln in enumerate(lines) if ln == "COMMITMENTS"), -1)
-        nums_line = lines[commit_idx + 1] if commit_idx >= 0 and commit_idx + 1 < len(lines) else ""
-        oi_match = re.search(r"OPEN INTEREST:\s*([\d,]+)", oi_line)
-        if oi_match:
-            out["open_interest"] = int(oi_match.group(1).replace(",", ""))
-        row = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", nums_line)]
-        if len(row) >= 8:
-            out["non_commercial_long"] = row[0]
-            out["non_commercial_short"] = row[1]
-            out["commercial_long"] = row[3]
-            out["commercial_short"] = row[4]
+    
+    # 尝试多种段落标记
+    lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+    
+    # ── OI 提取：多种模式 ──
+    oi_line = ""
+    for pattern in ["OPEN INTEREST:", "OPENINTEREST:", "Open interest is", "Open Interest:"]:
+        oi_line = next((ln for ln in lines if pattern.upper() in ln.upper()), "")
+        if oi_line:
+            break
+    oi_match = re.search(r"[\d,]{4,}", oi_line) if oi_line else None
+    if oi_match:
+        out["open_interest"] = int(oi_match.group(0).replace(",", ""))
+    
+    # ── 持仓数据提取：多种行标记 ──
+    commit_idx = -1
+    for marker in ["COMMITMENTS", "Commitments", "Positions", "POSITIONS"]:
+        commit_idx = next((i for i, ln in enumerate(lines) if ln.upper() == marker.upper()), -1)
+        if commit_idx >= 0:
+            break
+    # fallback: 找含 "LONG" 和 "SHORT" 的行
+    if commit_idx < 0:
+        commit_idx = next((i for i, ln in enumerate(lines) if "LONG" in ln.upper() and "SHORT" in ln.upper()), -1)
+    
+    nums_line = lines[commit_idx + 1] if commit_idx >= 0 and commit_idx + 1 < len(lines) else ""
+    row = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", nums_line)]
+    
+    # ── 根据列数推断数据布局 ──
+    if len(row) >= 8:
+        out["non_commercial_long"] = row[0]
+        out["non_commercial_short"] = row[1]
+        out["commercial_long"] = row[3]
+        out["commercial_short"] = row[4]
+        # 计算净头寸
+        out["non_commercial_net"] = row[0] - row[1]
+        out["commercial_net"] = row[3] - row[4]
+    elif len(row) >= 4:
+        # 降级：只有 4 列时尝试最佳猜测
+        out["non_commercial_long"] = row[0]
+        out["non_commercial_short"] = row[1]
+        out["non_commercial_net"] = row[0] - row[1]
+    else:
+        out["parse_warning"] = f"expected >=8 cols, got {len(row)}"
+        out["raw_nums"] = row
+    
+    # ── 验证 ──
+    nc_long = out.get("non_commercial_long", 0)
+    nc_short = out.get("non_commercial_short", 0)
+    if nc_long > 0 and nc_short > 0:
+        ratio = nc_long / max(nc_short, 1)
+        if ratio > 3:
+            out["position_signal"] = "🟢 投机极度看多"
+        elif ratio > 2:
+            out["position_signal"] = "🟢 投机偏多"
+        elif ratio < 0.33:
+            out["position_signal"] = "🔴 投机极度看空"
+        elif ratio < 0.5:
+            out["position_signal"] = "🔴 投机偏空"
+        else:
+            out["position_signal"] = "⚪ 中性"
+    
     return out
 
 

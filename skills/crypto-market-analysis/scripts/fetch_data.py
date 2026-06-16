@@ -282,26 +282,46 @@ def block_sentiment(coin_id):
 def block_macro(coin_id):
     print('=== 宏观面 ===')
     from concurrent.futures import ThreadPoolExecutor
+    import urllib.parse
 
     symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
 
-    # 全部用 Binance + alternative.me，零限流
+    def _yf_snapshot(ticker):
+        """Yahoo Finance 快照 — 轻量调用，只拉 5 天日线取最新价"""
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ticker)}?interval=1d&range=5d"
+        d = safe_fetch(url, f'YF:{ticker}')
+        if not d:
+            return None
+        try:
+            meta = d['chart']['result'][0]['meta']
+            return {
+                'price': meta.get('regularMarketPrice', 0),
+                'prev_close': meta.get('chartPreviousClose', 0),
+                'change_pct': (meta.get('regularMarketPrice', 0) / meta.get('chartPreviousClose', 1) - 1) * 100,
+            }
+        except (KeyError, IndexError, ZeroDivisionError):
+            return None
+
     def _btc_dominance():
-        # 用 BTCUSDT vs ETHUSDT 24h变化推断市场结构
-        return safe_fetch(f'https://api.binance.com/api/v3/ticker/24hr?symbol=ETHBTC', 'ETHBTC')
+        return safe_fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=ETHBTC', 'ETHBTC')
 
     def _total_market():
-        # Binance 全市场24h统计
         return safe_fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', 'BTC24h')
 
+    # Binance 并行 + Yahoo 串行（避免 429）
     results = {}
     with ThreadPoolExecutor(max_workers=2) as pool:
-        f1 = pool.submit(_btc_dominance)
-        f2 = pool.submit(_total_market)
-        results['ethbtc'] = f1.result()
-        results['btc'] = f2.result()
+        f_btc = pool.submit(_total_market)
+        f_ethbtc = pool.submit(_btc_dominance)
+        results['btc'] = f_btc.result()
+        results['ethbtc'] = f_ethbtc.result()
 
-    # BTC 24h 表现 = 加密市场风险偏好代理
+    # Yahoo Finance 串行 + 间隔
+    for key, ticker in [('vix', '^VIX'), ('dxy', 'DX-Y.NYB'), ('spy', 'SPY')]:
+        results[key] = _yf_snapshot(ticker)
+        time.sleep(0.4)
+
+    # ── 加密内部风险偏好 ──
     d = results.get('btc')
     if d:
         chg = float(d.get('priceChangePercent', 0))
@@ -311,7 +331,6 @@ def block_macro(coin_id):
         else: tag = '⚪ 中性'
         print(f'BTC 24h: {chg:+.1f}% | 量:${vol/1e9:.1f}B | 风险偏好: {tag}')
 
-    # ETH/BTC = 山寨币风险偏好
     d = results.get('ethbtc')
     if d:
         chg = float(d.get('priceChangePercent', 0))
@@ -319,8 +338,38 @@ def block_macro(coin_id):
         tag = '🟢山寨强势' if chg > 2 else '🔴BTC独强' if chg < -2 else '⚪均衡'
         print(f'ETH/BTC: {price:.5f} ({chg:+.1f}% 24h) → {tag}')
 
+    # ── 传统市场联动 ──
     print('\n--- 美股/VIX/DXY ---')
-    print('通过 yfinance MCP 获取（脚本不直接调Yahoo，避免429）')
+    for label, key, fmt, thresholds in [
+        ('VIX', 'vix', '{:.1f}', ('🔴恐慌>25', 25, '🟢平静<15', 15)),
+        ('DXY', 'dxy', '{:.2f}', ('🟢>105 risk-off', 105, '🔴<100 risk-on', 100)),
+        ('SPY', 'spy', '{:.2f}', ('', 0, '', 0)),  # 只展示涨跌
+    ]:
+        r = results.get(key)
+        if r and r['price']:
+            chg_str = f"{r['change_pct']:+.1f}%"
+            high_tag, high_val, low_tag, low_val = thresholds
+            if key == 'vix':
+                tag = high_tag if r['price'] > high_val else (low_tag if r['price'] < low_val else '⚪中性')
+            elif key == 'dxy':
+                tag = high_tag if r['price'] > high_val else (low_tag if r['price'] < low_val else '⚪中性')
+            else:
+                tag = '🟢' if r['change_pct'] > 0 else '🔴'
+            print(f'  {label:5s} ${r["price"]:{fmt}} ({chg_str}) {tag}')
+
+    # ── BTC 与 SPY 相关性速览 ──
+    btc_chg = float(results.get('btc', {}).get('priceChangePercent', 0))
+    spy_r = results.get('spy')
+    if spy_r and spy_r['price'] and btc_chg:
+        spy_chg = spy_r['change_pct']
+        if btc_chg > 0 and spy_chg > 0:
+            print('\n🔗 BTC↗+SPY↗ → 风险偏好共振，加密受益')
+        elif btc_chg < 0 and spy_chg < 0:
+            print('\n🔗 BTC↘+SPY↘ → 全局避险，加密承压')
+        elif btc_chg > 0 and spy_chg < 0:
+            print('\n🔗 BTC↗+SPY↘ → 加密独立走强，关注是否持续')
+        elif btc_chg < 0 and spy_chg > 0:
+            print('\n🔗 BTC↘+SPY↗ → 加密独立走弱，警惕资金外流')
 
 # ─── 块7: 期权(BTC only) ───
 def block_options(coin_id):

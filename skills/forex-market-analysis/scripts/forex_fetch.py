@@ -208,20 +208,41 @@ def extract_cftc_financial(symbol: str) -> Dict[str, Any]:
     if not market:
         return {}
     url = "https://www.cftc.gov/dea/options/financial_lof.htm"
-    html = fetch_text(url)
+    try:
+        html = fetch_text(url)
+    except Exception:
+        return {"source": url, "market": market, "found": False, "error": "fetch failed"}
     idx = html.upper().find(market.upper())
     if idx < 0:
-        return {"source": url, "market": market, "found": False}
-    block = html[idx:idx + 1800]
+        return {"source": url, "market": market, "found": False, "error": "market not in page"}
+    # 窗口扩到 3000，与 futures 统一
+    block = html[idx:idx + 3000]
     lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-    oi_line = next((ln for ln in lines if "Open Interest is" in ln), "")
-    pos_idx = next((i for i, ln in enumerate(lines) if ln == "Positions"), -1)
+    
+    # ── OI 多种模式 ──
+    oi_line = ""
+    for pattern in ["Open Interest is", "OPEN INTEREST:", "OpenInterest is"]:
+        oi_line = next((ln for ln in lines if pattern.upper() in ln.upper()), "")
+        if oi_line:
+            break
+    oi_match = re.search(r"[\d,]{4,}", oi_line) if oi_line else None
+    
+    # ── 持仓行多种标记 ──
+    pos_idx = -1
+    for marker in ["Positions", "POSITIONS", "Commitments", "COMMITMENTS"]:
+        pos_idx = next((i for i, ln in enumerate(lines) if ln.upper() == marker.upper()), -1)
+        if pos_idx >= 0:
+            break
+    if pos_idx < 0:
+        pos_idx = next((i for i, ln in enumerate(lines) if "LONG" in ln.upper() and "SHORT" in ln.upper()), -1)
+    
     pos_line = lines[pos_idx + 1] if pos_idx >= 0 and pos_idx + 1 < len(lines) else ""
-    oi_match = re.search(r"Open Interest is\s*([\d,]+)", oi_line, re.I)
     row = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", pos_line)]
-    out = {"source": url, "market": market, "found": True, "report_type": "financial_lof", "raw_excerpt": block[:900]}
+    
+    out = {"source": url, "market": market, "found": True, "report_type": "financial_lof"}
     if oi_match:
-        out["open_interest"] = int(oi_match.group(1).replace(",", ""))
+        out["open_interest"] = int(oi_match.group(0).replace(",", ""))
+    
     if len(row) >= 14:
         keys = [
             "dealer_long", "dealer_short", "dealer_spread",
@@ -231,7 +252,39 @@ def extract_cftc_financial(symbol: str) -> Dict[str, Any]:
             "nonreportable_long", "nonreportable_short",
         ]
         out.update(dict(zip(keys, row[:14])))
+        # 信号：资产经理 vs 杠杆基金 净头寸方向
+        am_net = out.get("asset_mgr_long", 0) - out.get("asset_mgr_short", 0)
+        lev_net = out.get("leveraged_long", 0) - out.get("leveraged_short", 0)
+        if am_net > 0 and lev_net < 0:
+            out["position_signal"] = "🟢 实需看多+投机看空 → 关注反转"
+        elif am_net < 0 and lev_net > 0:
+            out["position_signal"] = "🔴 实需看空+投机看多 → 关注反转"
+        elif am_net > 0 and lev_net > 0:
+            out["position_signal"] = "🟢 一致看多"
+        elif am_net < 0 and lev_net < 0:
+            out["position_signal"] = "🔴 一致看空"
+        else:
+            out["position_signal"] = "⚪ 中性"
+    elif len(row) >= 4:
+        out["parse_warning"] = f"expected >=14 cols, got {len(row)}"
+        out["raw_nums"] = row
+    else:
+        out["parse_warning"] = f"expected >=14 cols, got {len(row)}"
+        out["raw_nums"] = row
+    
     return out
+
+
+def _dxy_trend(dxy_data: dict) -> str:
+    """从 DXY 快照推断近期趋势方向。"""
+    if not dxy_data or not dxy_data.get("price"):
+        return "N/A"
+    chg = dxy_data.get("change_pct", 0)
+    if chg > 0.3:
+        return "🟢 走强"
+    elif chg < -0.3:
+        return "🔴 走弱"
+    return "⚪ 横盘"
 
 
 def main() -> int:
@@ -279,6 +332,32 @@ def main() -> int:
         data["source_status"]["cftc"] = "error"
     else:
         data["source_status"]["cftc"] = "ok" if data["structured_drivers"].get("cftc", {}).get("found") else "missing"
+    # 利率差数据 — 拉 US 10Y/2Y 和 DXY 作为利率差代理
+    try:
+        us_10y = fetch_quote("^TNX")
+        us_2y_raw = fetch_chart("^IRX", "1d", "5d")
+        us_2y_price = us_2y_raw[-1]["close"] if us_2y_raw else 0
+        us_2y = {"symbol": "^IRX", "price": us_2y_price, "prev_close": us_2y_raw[-2]["close"] if len(us_2y_raw) > 1 else us_2y_price, "change_pct": 0}
+        if us_2y["prev_close"]:
+            us_2y["change_pct"] = (us_2y["price"] - us_2y["prev_close"]) / us_2y["prev_close"] * 100
+        dxy = data["proxies"].get("DX-Y.NYB", fetch_quote("DX-Y.NYB"))
+        curve_spread = us_10y["price"] - us_2y["price"] if us_10y["price"] and us_2y["price"] else None
+        data["structured_drivers"]["rates"] = {
+            "us_10y": us_10y,
+            "us_2y": us_2y,
+            "dxy": dxy,
+            "curve_2s10s": round(curve_spread, 2) if curve_spread is not None else None,
+            "curve_signal": "🟢 陡峭(加息预期弱)" if (curve_spread and curve_spread > 0.5) else ("🔴 倒挂(衰退预警)" if (curve_spread is not None and curve_spread < 0) else "⚪ 平坦"),
+            "dxy_trend_30d": _dxy_trend(data["proxies"].get("DX-Y.NYB", {})),
+            "central_bank_events": [
+                e for e in data.get("macro_events", [])
+                if any(k in (e.get("title", "") + e.get("country", "")).upper()
+                       for k in ["FED", "ECB", "BOJ", "BOE", "RBA", "RBNZ", "SNB", "BOC", "PBOC"])
+            ][:5],
+        }
+    except Exception as exc:
+        data["errors"]["rates"] = str(exc)
+        data["source_status"]["rates"] = "error"
     print(json.dumps(data, ensure_ascii=False, indent=None if args.compact else 2))
     return 0
 

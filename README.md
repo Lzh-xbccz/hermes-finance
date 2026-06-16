@@ -251,20 +251,25 @@ SL: $62,900 | TP1: $67,248 | TP2: $70,000
 
 ### v1.0.0 (2026-06-17)
 
-首次正式版本发布。10 项修复：
+首次正式版本发布。15 项修复（代码 bug + 分析逻辑）：
 
-| 严重度 | 修复内容 |
-|--------|---------|
-| 🔴 | `forex_fetch.py` 补上缺失的 `import time`，429 限流重试不再崩 |
-| 🔴 | `market_analyze.py` 硬编码 `/root/.hermes/` 路径改为项目相对路径 |
-| 🔴 | `feishu.py` `_get_stock_names` 加 `try/finally`，baostock 异常不再泄漏会话 |
-| 🔴 | `market_analyze.py` 删除 `ANALYZE_SCRIPTS` 死代码（引用 4 个不存在的文件） |
-| 🟡 | `czsc-ccxt` / `crypto` 两个 `czsc_analyze.py` 硬编码未来日期改为动态计算 |
-| 🟡 | `fetch_data.py` 删除从未被调用的 `block_macro_enhanced` 死代码 |
-| 🟡 | `install.sh` 补全 `baostock` / `pydantic-settings` / `rich` / `python-dotenv` 依赖 |
-| 🟡 | `scripts/czsc_analyze.py` 替换 `czsc._native.signals.call_signal` 私有 API 为 `czsc.signals` 公开导入 |
-| 🟡 | `market_analyze.py` 去掉 `tavily_supplement` 里的魔法路径注入 |
-| 🟡 | `DataEngine` SQLite 连接复用，策略遍历 5200+ 只股票不再每次新建连接 |
+| 严重度 | 类型 | 修复内容 |
+|--------|------|---------|
+| 🔴 | 代码 | `forex_fetch.py` 补上缺失的 `import time`，429 限流重试不再崩 |
+| 🔴 | 代码 | `market_analyze.py` 硬编码 `/root/.hermes/` 路径改为项目相对路径 |
+| 🔴 | 代码 | `feishu.py` `_get_stock_names` 加 `try/finally`，baostock 异常不再泄漏会话 |
+| 🔴 | 代码 | `market_analyze.py` 删除 `ANALYZE_SCRIPTS` 死代码（引用 4 个不存在的文件） |
+| 🔴 | 分析 | `block_macro` 不再是空壳 — 真正拉 VIX/DXY/SPY 数据 + BTC-SPY 联动判断 |
+| 🔴 | 分析 | `akshare` 补入 `requirements.txt` 和 `install.sh`，定增策略不再静默失败 |
+| 🟡 | 分析 | `resonance_check` 重写 — 加入中枢位置、嵌套关系、综合评分（-5~+5） |
+| 🟡 | 分析 | `forex_fetch.py` 新增利率差模块 — 拉 US 10Y/2Y 利差 + 央行事件筛选 |
+| 🟡 | 分析 | CFTC 解析加固 — 窗口 1600→3000、多种段落标记容错、仓位信号输出 |
+| 🟡 | 代码 | `czsc-ccxt` / `crypto` 两个 `czsc_analyze.py` 硬编码未来日期改为动态计算 |
+| 🟡 | 代码 | `fetch_data.py` 删除从未被调用的 `block_macro_enhanced` 死代码 |
+| 🟡 | 代码 | `install.sh` 补全 `baostock` / `pydantic-settings` / `rich` / `python-dotenv` 依赖 |
+| 🟡 | 代码 | `scripts/czsc_analyze.py` 替换 `czsc._native.signals.call_signal` 私有 API 为 `czsc.signals` 公开导入 |
+| 🟡 | 代码 | `market_analyze.py` 去掉 `tavily_supplement` 里的魔法路径注入 |
+| 🟡 | 代码 | `DataEngine` SQLite 连接复用，策略遍历 5200+ 只股票不再每次新建连接 |
 
 ---
 

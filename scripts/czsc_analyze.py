@@ -147,17 +147,82 @@ class MultiFreqAnalysis:
             self.analyses[fk] = FreqAnalysis(symbol, fk)
     
     def resonance_check(self) -> str:
-        """检查多级别共振"""
-        dirs = []
-        for fk in self.freq_keys:
-            fa = self.analyses[fk]
-            dirs.append(fa.last_bi_dir)
+        """检查多级别共振 — 笔方向 + 中枢位置 + 嵌套关系"""
+        lines = []
         
-        if len(set(dirs)) == 1:
-            d = dirs[0]
-            return f"同向{'上涨 📈' if d == '向上' else '下跌 📉'}（共振确认）"
+        # ── 1. 笔方向共振 ──
+        dirs = {fk: fa.last_bi_dir for fk, fa in self.analyses.items()}
+        unique_dirs = set(dirs.values())
+        if len(unique_dirs) == 1:
+            d = list(unique_dirs)[0]
+            lines.append(f"笔方向: {'🟢 一致上涨' if d == '向上' else '🔴 一致下跌'}（同向共振 ✓）")
         else:
-            return f"分歧 ⚠️: {'/'.join(f'{fk}={fa.last_bi_dir}' for fk, fa in self.analyses.items())}"
+            lines.append(f"笔方向: ⚠️ 分歧 — {' | '.join(f'{fk}={d}' for fk, d in dirs.items())}")
+        
+        # ── 2. 中枢位置共振 ──
+        zs_positions = {}
+        for fk, fa in self.analyses.items():
+            if fa.zs_fxs:
+                zs_positions[fk] = fa.zs_position
+        if zs_positions:
+            above = [fk for fk, p in zs_positions.items() if '上方' in p]
+            inside = [fk for fk, p in zs_positions.items() if '内部' in p]
+            below = [fk for fk, p in zs_positions.items() if '下方' in p]
+            pos_parts = []
+            if above: pos_parts.append(f"{','.join(above)} 在中枢上方 🟢")
+            if inside: pos_parts.append(f"{','.join(inside)} 在中枢内部 ⚪")
+            if below: pos_parts.append(f"{','.join(below)} 在中枢下方 🔴")
+            lines.append(f"中枢位置: {' | '.join(pos_parts)}")
+        else:
+            lines.append(f"中枢位置: 无中枢参考")
+        
+        # ── 3. 嵌套关系（小级别中枢 vs 大级别中枢） ──
+        sorted_keys = sorted(self.freq_keys, key=lambda k: FREQ_MAP[k].value, reverse=True)
+        if len(sorted_keys) >= 2:
+            big = self.analyses[sorted_keys[0]]
+            small = self.analyses[sorted_keys[-1]]
+            if big.zs_fxs and small.zs_fxs:
+                big_zs = big.zs_fxs[-1]
+                small_zs = small.zs_fxs[-1]
+                if small_zs.low >= big_zs.low and small_zs.high <= big_zs.high:
+                    lines.append(f"嵌套: {sorted_keys[-1]} 中枢在 {sorted_keys[0]} 中枢内部 → 标准震荡 ⚪")
+                elif small_zs.low > big_zs.high:
+                    lines.append(f"嵌套: {sorted_keys[-1]} 中枢在 {sorted_keys[0]} 中枢上方 → 强势离开 🟢")
+                elif small_zs.high < big_zs.low:
+                    lines.append(f"嵌套: {sorted_keys[-1]} 中枢在 {sorted_keys[0]} 中枢下方 → 弱势离开 🔴")
+        
+        # ── 4. 综合评分 ──
+        score = 0
+        # 笔方向一致 +2/-2
+        if len(unique_dirs) == 1:
+            d = list(unique_dirs)[0]
+            score += 2 if d == '向上' else -2
+        # 中枢位置
+        if zs_positions:
+            n_above = sum(1 for p in zs_positions.values() if '上方' in p)
+            n_below = sum(1 for p in zs_positions.values() if '下方' in p)
+            score += n_above - n_below
+        # 嵌套
+        if len(sorted_keys) >= 2 and big.zs_fxs and small.zs_fxs:
+            if small_zs.low > big_zs.high:
+                score += 2
+            elif small_zs.high < big_zs.low:
+                score -= 2
+        
+        if score >= 3:
+            verdict = '🟢 强做多'
+        elif score >= 1:
+            verdict = '🟢 偏多'
+        elif score <= -3:
+            verdict = '🔴 强做空'
+        elif score <= -1:
+            verdict = '🔴 偏空'
+        else:
+            verdict = '⚪ 震荡观望'
+        
+        lines.append(f"综合评分: {score:+d} → {verdict}")
+        
+        return '\n'.join(lines)
     
     def buy_signal_summary(self) -> str:
         """汇总所有级别的买入信号"""
@@ -208,7 +273,8 @@ class MultiFreqAnalysis:
         primary = self.analyses.get('4h') or list(self.analyses.values())[0]
         lines.append("## 📊 摘要")
         lines.append(f"- **当前价**: ${primary.cur_price:.4f}")
-        lines.append(f"- **共振判断**: {self.resonance_check()}")
+        resonance = self.resonance_check().replace('\n', '\n  ')
+        lines.append(f"- **共振判断**:\n  {resonance}")
         lines.append(f"- **买入信号**: {self.buy_signal_summary()}")
         lines.append("")
         
