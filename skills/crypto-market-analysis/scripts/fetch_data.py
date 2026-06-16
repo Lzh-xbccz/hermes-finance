@@ -357,19 +357,53 @@ def block_macro(coin_id):
                 tag = '🟢' if r['change_pct'] > 0 else '🔴'
             print(f'  {label:5s} ${r["price"]:{fmt}} ({chg_str}) {tag}')
 
-    # ── BTC 与 SPY 相关性速览 ──
-    btc_chg = float(results.get('btc', {}).get('priceChangePercent', 0))
-    spy_r = results.get('spy')
-    if spy_r and spy_r['price'] and btc_chg:
-        spy_chg = spy_r['change_pct']
-        if btc_chg > 0 and spy_chg > 0:
-            print('\n🔗 BTC↗+SPY↗ → 风险偏好共振，加密受益')
-        elif btc_chg < 0 and spy_chg < 0:
-            print('\n🔗 BTC↘+SPY↘ → 全局避险，加密承压')
-        elif btc_chg > 0 and spy_chg < 0:
-            print('\n🔗 BTC↗+SPY↘ → 加密独立走强，关注是否持续')
-        elif btc_chg < 0 and spy_chg > 0:
-            print('\n🔗 BTC↘+SPY↗ → 加密独立走弱，警惕资金外流')
+    # ── BTC 与 SPY 5 日趋势联动 ──
+    # 24h 涨跌太短，用 5 日方向判断趋势联动
+    try:
+        # 拉 BTC 5 日线（用 Binance 而非 Yahoo，零限流）
+        btc_5d = safe_fetch(
+            f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=6',
+            'BTC 5日线'
+        )
+        spy_5d_raw = safe_fetch(
+            'https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&range=5d',
+            'SPY 5日线'
+        )
+        btc_trend = None
+        spy_trend = None
+        if btc_5d and len(btc_5d) >= 5:
+            btc_5d_close = float(btc_5d[-1][4])
+            btc_5d_ago = float(btc_5d[-5][4])
+            btc_trend = (btc_5d_close / btc_5d_ago - 1) * 100
+        if spy_5d_raw:
+            spy_rows = spy_5d_raw['chart']['result'][0]['indicators']['quote'][0]['close']
+            spy_rows = [x for x in spy_rows if x is not None]
+            if len(spy_rows) >= 5:
+                spy_trend = (spy_rows[-1] / spy_rows[-5] - 1) * 100
+        
+        if btc_trend is not None and spy_trend is not None:
+            print(f'\n🔗 BTC 5日: {btc_trend:+.1f}% | SPY 5日: {spy_trend:+.1f}%')
+            if btc_trend > 2 and spy_trend > 1:
+                print('   → 风险偏好共振走强，加密处于有利宏观环境')
+            elif btc_trend < -2 and spy_trend < -1:
+                print('   → 全局风险厌恶，加密承压，关注 DXY 是否同步走高')
+            elif btc_trend > 2 and spy_trend < -1:
+                print('   → 加密独立走强（5日），可能是避险资金流入 BTC')
+            elif btc_trend < -2 and spy_trend > 1:
+                print('   → 加密独立走弱（5日），警惕板块资金外流')
+            else:
+                print('   → 无明确联动信号')
+    except Exception:
+        # 降级到 24h 快照
+        btc_chg = float(results.get('btc', {}).get('priceChangePercent', 0))
+        spy_r = results.get('spy')
+        if spy_r and spy_r['price'] and btc_chg:
+            spy_chg = spy_r['change_pct']
+            print(f'\n🔗 BTC 24h: {btc_chg:+.1f}% | SPY 24h: {spy_chg:+.1f}%')
+            if btc_chg > 0 and spy_chg > 0:
+                print('   → 风险偏好共振（24h快照，可靠性低于5日趋势）')
+            elif btc_chg < 0 and spy_chg < 0:
+                print('   → 同步避险（24h快照）')
 
 # ─── 块7: 期权(BTC only) ───
 def block_options(coin_id):

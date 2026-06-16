@@ -211,16 +211,16 @@ class MultiFreqAnalysis:
             elif small_zs.high < big_zs.low:
                 score -= 2
         
-        if score >= 3:
-            verdict = '🟢 强做多'
-        elif score >= 1:
-            verdict = '🟢 偏多'
-        elif score <= -3:
-            verdict = '🔴 强做空'
-        elif score <= -1:
-            verdict = '🔴 偏空'
+        if score >= 4:
+            verdict = '🟢 强做多（笔+中枢+嵌套三重共振）'
+        elif score >= 2:
+            verdict = '🟢 偏多（至少两项共振）'
+        elif score <= -4:
+            verdict = '🔴 强做空（笔+中枢+嵌套三重共振）'
+        elif score <= -2:
+            verdict = '🔴 偏空（至少两项共振）'
         else:
-            verdict = '⚪ 震荡观望'
+            verdict = '⚪ 震荡观望（信号不足，等方向确认）'
         
         lines.append(f"综合评分: {score:+d} → {verdict}")
         

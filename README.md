@@ -2,17 +2,20 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.0.0-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.0.1-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 > 基于 [czsc](https://github.com/waditu/czsc) v1.0 缠论库，覆盖 **加密货币/商品期货/外汇/A股/美股** 五大市场。每个市场采用多维因果分析框架，集成缠论作为核心技术分析维度。
 
 ---
 
+### 🎉 v1.0.1 (2026-06-17)
+
+4 项分析逻辑修补：虚假利差修正(`^IRX`→`^FVX`)、对手国利率代理、共振阈值收紧、BTC-SPY 5日趋势。
+详见 [CHANGELOG.md](CHANGELOG.md)。
+
 ### 🎉 v1.0.0 正式发布 (2026-06-17)
 
-15 项修复，涵盖代码健壮性 + 分析逻辑。加密宏观模块从空壳变为真正拉 VIX/DXY/SPY 数据；
-缠论共振从单一笔方向升级为四层综合评分；外汇新增利率差模块；CFTC 解析全面加固。
-详见 [CHANGELOG.md](CHANGELOG.md)。
+15 项修复，涵盖代码健壮性 + 分析逻辑。
 
 ---
 
@@ -256,6 +259,15 @@ SL: $62,900 | TP1: $67,248 | TP2: $70,000
 ---
 
 ## 📋 更新日志
+
+### v1.0.1 (2026-06-17)
+
+| 严重度 | 类型 | 修复内容 |
+|--------|------|---------|
+| 🔴 | 分析 | `forex_fetch.py` 利差：`^IRX`(13周国库券) → `^FVX`(5年国债)，虚假 3m10s 改为正确 5s10s |
+| 🔴 | 分析 | `forex_fetch.py` 新增对手国利率代理 — EUR→BUND=F 期货，无数据货币对明确标注 |
+| 🟡 | 分析 | `czsc_analyze.py` 共振评分阈值 1/3→2/4，单级别笔方向不再触发假信号 |
+| 🟡 | 分析 | `fetch_data.py` BTC-SPY 联动：24h 快照 → 5 日趋势+降级 fallback |
 
 ### v1.0.0 (2026-06-17)
 

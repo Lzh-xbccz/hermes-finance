@@ -275,6 +275,46 @@ def extract_cftc_financial(symbol: str) -> Dict[str, Any]:
     return out
 
 
+# 对手国利率代理映射：Yahoo Finance ticker → 说明
+_COUNTERPARTY_RATE_PROXY = {
+    # (ticker, is_yield, note)
+    # is_yield=False 表示 ticker 是期货价格（涨=收益率跌），需要反向解读
+    "EURUSD": ("BUND=F", False, "德国 Euro-Bund 期货 — 价涨=收益率跌→EUR弱"),
+    "USDJPY": (None, True, "日本10Y — Yahoo 无免费源，手动查 BOJ 政策利率"),
+    "GBPUSD": ("BUND=F", False, "英国 Gilt — Yahoo 无可靠 ticker，暂用 Bund 近似"),
+    "AUDUSD": (None, True, "澳洲10Y — Yahoo 无免费源，手动查 RBA 政策利率"),
+    "USDCHF": (None, True, "瑞士10Y — Yahoo 无免费源"),
+    "USDCNH": (None, True, "中国10Y — Yahoo 无免费源"),
+    "DXY": ("^TNX", True, "DXY 无对手方 — 仅美元侧"),
+}
+
+
+def _fetch_counterparty_rate(symbol: str) -> dict | None:
+    """尝试拉对手国国债收益率/期货作为利率代理。
+    
+    免费数据源限制：Yahoo Finance 仅有美德等主要国家 ticker。
+    期货价格 ticker (is_yield=False) 需反向解读：价涨=收益率跌=货币弱。
+    无法获取时返回 None 并在输出中明确标注。
+    """
+    entry = _COUNTERPARTY_RATE_PROXY.get(symbol)
+    if entry is None:
+        return {"note": "未知货币对", "yield_proxy": None, "is_yield": True}
+    ticker, is_yield, note = entry
+    if ticker is None:
+        return {"note": note, "yield_proxy": None, "is_yield": True}
+    try:
+        q = fetch_quote(ticker)
+        return {
+            "ticker": ticker,
+            "yield_proxy": q.get("price"),
+            "change_pct": q.get("change_pct", 0),
+            "is_yield": is_yield,
+            "note": note,
+        }
+    except Exception:
+        return {"ticker": ticker, "yield_proxy": None, "is_yield": is_yield, "note": f"{note} (拉取失败)"}
+
+
 def _dxy_trend(dxy_data: dict) -> str:
     """从 DXY 快照推断近期趋势方向。"""
     if not dxy_data or not dxy_data.get("price"):
@@ -332,23 +372,56 @@ def main() -> int:
         data["source_status"]["cftc"] = "error"
     else:
         data["source_status"]["cftc"] = "ok" if data["structured_drivers"].get("cftc", {}).get("found") else "missing"
-    # 利率差数据 — 拉 US 10Y/2Y 和 DXY 作为利率差代理
+    # 利率差数据 — 拉 US 10Y/5Y/DXY + 对手国利率代理
     try:
-        us_10y = fetch_quote("^TNX")
-        us_2y_raw = fetch_chart("^IRX", "1d", "5d")
-        us_2y_price = us_2y_raw[-1]["close"] if us_2y_raw else 0
-        us_2y = {"symbol": "^IRX", "price": us_2y_price, "prev_close": us_2y_raw[-2]["close"] if len(us_2y_raw) > 1 else us_2y_price, "change_pct": 0}
-        if us_2y["prev_close"]:
-            us_2y["change_pct"] = (us_2y["price"] - us_2y["prev_close"]) / us_2y["prev_close"] * 100
+        us_10y = fetch_quote("^TNX")   # CBOE 10Y Treasury yield (实际收益率)
+        us_5y = fetch_quote("^FVX")    # CBOE 5Y Treasury yield
         dxy = data["proxies"].get("DX-Y.NYB", fetch_quote("DX-Y.NYB"))
-        curve_spread = us_10y["price"] - us_2y["price"] if us_10y["price"] and us_2y["price"] else None
+        # 5s10s 利差（最常用的收益率曲线指标之一）
+        curve_5s10s = round(us_10y["price"] - us_5y["price"], 2) if (us_10y.get("price") and us_5y.get("price")) else None
+        
+        # 对手国利率代理
+        counterparty = _fetch_counterparty_rate(symbol)
+        
+        rate_diff = None
+        diff_signal = "N/A"
+        if counterparty and counterparty.get("yield_proxy") is not None and us_10y.get("price"):
+            cp = counterparty
+            if cp.get("is_yield"):
+                # 双方都是收益率 → 直接算利差
+                rate_diff = round(us_10y["price"] - cp["yield_proxy"], 2)
+                diff_signal = (
+                    f"🟢 USD利差优势 +{rate_diff:.1f}%" if rate_diff > 0.5
+                    else f"🔴 USD利差劣势 {rate_diff:.1f}%" if rate_diff < -0.5
+                    else "⚪ 利差中性"
+                )
+            else:
+                # 对手是期货价格(非收益率) → 用价格变化方向推断
+                cp_chg = cp.get("change_pct", 0)
+                rate_diff = None  # 无法算精确利差
+                if cp_chg < -0.3:
+                    diff_signal = "🟢 对手国债期货跌→收益率升→对手货币走强预期"
+                elif cp_chg > 0.3:
+                    diff_signal = "🔴 对手国债期货涨→收益率降→对手货币走弱预期"
+                else:
+                    diff_signal = "⚪ 对手国债期货横盘"
+        elif counterparty and counterparty.get("yield_proxy") is None:
+            diff_signal = f"⚠️ {counterparty.get('note', '对手利率无数据')}"
+        
         data["structured_drivers"]["rates"] = {
             "us_10y": us_10y,
-            "us_2y": us_2y,
+            "us_5y": us_5y,
             "dxy": dxy,
-            "curve_2s10s": round(curve_spread, 2) if curve_spread is not None else None,
-            "curve_signal": "🟢 陡峭(加息预期弱)" if (curve_spread and curve_spread > 0.5) else ("🔴 倒挂(衰退预警)" if (curve_spread is not None and curve_spread < 0) else "⚪ 平坦"),
-            "dxy_trend_30d": _dxy_trend(data["proxies"].get("DX-Y.NYB", {})),
+            "curve_5s10s": curve_5s10s,
+            "curve_signal": (
+                "🟢 陡峭(>0.7% 加息预期弱)" if (curve_5s10s and curve_5s10s > 0.7)
+                else "🔴 倒挂(<0 衰退预警)" if (curve_5s10s is not None and curve_5s10s < 0)
+                else "⚪ 平坦"
+            ),
+            "dxy_trend": _dxy_trend(dxy),
+            "counterparty": counterparty,
+            "rate_differential": rate_diff,
+            "diff_signal": diff_signal,
             "central_bank_events": [
                 e for e in data.get("macro_events", [])
                 if any(k in (e.get("title", "") + e.get("country", "")).upper()
