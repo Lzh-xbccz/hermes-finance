@@ -168,14 +168,29 @@ class MultiFreqAnalysis:
                 results.append(f"{fk}: {sig_str}")
         return ' | '.join(results) if results else '无买入信号'
     
-    def generate_charts(self, outdir: str = '/tmp', theme: str = 'dark') -> List[str]:
-        """生成所有级别的 lightweight-charts"""
+    def generate_charts(self, outdir: str = '/tmp', theme: str = 'dark', localize: bool = True) -> List[str]:
+        """生成所有级别的 lightweight-charts，默认中文化"""
         from czsc.utils.plotting.lightweight import plot_czsc
+        import subprocess
+        
+        localizer = os.path.join(os.path.dirname(__file__), 'localize_chart.py')
         files = []
         for fk, fa in self.analyses.items():
             outfile = os.path.join(outdir, f'czsc_{self.symbol}_{fk}.html')
             plot_czsc(fa.c, path=outfile, theme=theme, title=f'{self.symbol} {fk}')
-            files.append(outfile)
+            
+            if localize and os.path.exists(localizer):
+                try:
+                    out_cn = os.path.join(outdir, f'czsc_{self.symbol}_{fk}_cn.html')
+                    subprocess.run(
+                        ['python3', localizer, outfile, '-o', out_cn],
+                        capture_output=True, timeout=10
+                    )
+                    files.append(out_cn)
+                except Exception:
+                    files.append(outfile)
+            else:
+                files.append(outfile)
         return files
     
     def generate_report(self, outfile: Optional[str] = None) -> str:
