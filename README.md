@@ -249,19 +249,22 @@ SL: $62,900 | TP1: $67,248 | TP2: $70,000
 
 ## 📋 更新日志
 
-### v1.0.0 (2026-06-16)
+### v1.0.0 (2026-06-17)
 
-首次正式版本发布。8 项 bug 修复：
+首次正式版本发布。10 项修复：
 
 | 严重度 | 修复内容 |
 |--------|---------|
 | 🔴 | `forex_fetch.py` 补上缺失的 `import time`，429 限流重试不再崩 |
 | 🔴 | `market_analyze.py` 硬编码 `/root/.hermes/` 路径改为项目相对路径 |
+| 🔴 | `feishu.py` `_get_stock_names` 加 `try/finally`，baostock 异常不再泄漏会话 |
+| 🔴 | `market_analyze.py` 删除 `ANALYZE_SCRIPTS` 死代码（引用 4 个不存在的文件） |
 | 🟡 | `czsc-ccxt` / `crypto` 两个 `czsc_analyze.py` 硬编码未来日期改为动态计算 |
 | 🟡 | `fetch_data.py` 删除从未被调用的 `block_macro_enhanced` 死代码 |
 | 🟡 | `install.sh` 补全 `baostock` / `pydantic-settings` / `rich` / `python-dotenv` 依赖 |
 | 🟡 | `scripts/czsc_analyze.py` 替换 `czsc._native.signals.call_signal` 私有 API 为 `czsc.signals` 公开导入 |
 | 🟡 | `market_analyze.py` 去掉 `tavily_supplement` 里的魔法路径注入 |
+| 🟡 | `DataEngine` SQLite 连接复用，策略遍历 5200+ 只股票不再每次新建连接 |
 
 ---
 
