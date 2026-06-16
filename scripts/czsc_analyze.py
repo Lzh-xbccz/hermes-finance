@@ -291,13 +291,18 @@ def parse_args():
     do_signals = False
     do_report = False
     
-    for arg in sys.argv[1:]:
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
         if arg == '--chart':
             do_chart = True
         elif arg == '--signals':
-            do_signals = True  # Always on for multi-freq
+            do_signals = True
         elif arg == '--report':
             do_report = True
+        elif arg == '--freqs' and i + 1 < len(sys.argv):
+            freqs = sys.argv[i + 1].split(',')
+            i += 1  # 跳过值
         elif arg.startswith('--freqs='):
             freqs = arg.split('=', 1)[1].split(',')
         elif arg in ('--help', '-h'):
@@ -312,6 +317,7 @@ def parse_args():
                 freqs = [arg]
             else:
                 symbol = arg.upper()
+        i += 1
     
     return symbol, freqs, do_chart, do_report
 
