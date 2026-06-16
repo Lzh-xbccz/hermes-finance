@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.2 (2026-06-17) — 结构加固
+
+### 🟡 代码架构
+
+- **czsc_analyze 三合一** — 两个 skill 级脚本改为薄封装，核心逻辑统一在 `scripts/czsc_analyze.py`
+- **a_share_fetch 解耦** — 480 行内嵌 Python 字符串提取为独立文件 `a_share_remote.py`（文件缩小 62%）
+- **Sequoia 策略并行化** — `BaseStrategy._run_parallel` + WAL 模式 + `get_ohlcv_batch` 批量读取
+- **MaVolumeStrategy 示范** — 用 `_run_parallel` 重写，8 线程并行
+
+### 🟡 数据源升级
+
+- **CFTC 结构化 CSV** — futures/forex 优先读 ZIP/CSV（可靠），HTML 爬虫降级为 fallback
+- **对手国利率** — JPY/AUD/CHF/CNH 从"无数据"升级到 BWX/BNDX 国际债券 ETF 代理
+- **Yahoo 全局速率限制** — `_yf_throttle()` 确保请求间隔 ≥ 0.5s，降低 429 触发
+
+---
+
 ## v1.0.1 (2026-06-17) — 分析逻辑修补 + 补充
 
 ### 🔴 修复

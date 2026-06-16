@@ -14,6 +14,21 @@ from typing import Any, Dict, List
 
 USER_AGENT = "Mozilla/5.0"
 
+# ── 全局 Yahoo Finance 速率限制（所有 fetch 调用共享）──
+_YF_LAST_CALL = 0.0
+_YF_MIN_INTERVAL = 0.5  # 秒
+
+
+def _yf_throttle():
+    """确保 Yahoo Finance 请求间隔不低于 _YF_MIN_INTERVAL 秒。"""
+    global _YF_LAST_CALL
+    import time as _time
+    now = _time.monotonic()
+    wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
+    if wait > 0:
+        _time.sleep(wait)
+    _YF_LAST_CALL = _time.monotonic()
+
 SYMBOL_MAP = {
     "EURUSD": {"ticker": "EURUSD=X", "label": "EUR/USD", "query": "EURUSD"},
     "USDJPY": {"ticker": "JPY=X", "label": "USD/JPY", "query": "USDJPY"},
@@ -88,6 +103,7 @@ def to_float(value: Any) -> float | None:
 
 
 def fetch_chart(ticker: str, interval: str, range_: str) -> List[Dict[str, Any]]:
+    _yf_throttle()
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ticker)}?interval={interval}&range={range_}"
     result = fetch_json(url)["chart"]["result"][0]
     quote = (result.get("indicators", {}).get("quote") or [{}])[0]
@@ -203,18 +219,79 @@ def parse_event_datetime(date_str: str, time_str: str) -> datetime | None:
         return None
 
 
+def _cftc_financial_csv(market_name: str) -> Dict[str, Any] | None:
+    """从 CFTC 金融期货年度 ZIP/CSV 提取数据。"""
+    import io, zipfile
+    year = datetime.now().year
+    url = f"https://www.cftc.gov/files/dea/history/fin_fut_txt_{year}.zip"
+    try:
+        resp = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}), timeout=30)
+        zf = zipfile.ZipFile(io.BytesIO(resp.read()))
+        csv_names = sorted([n for n in zf.namelist() if n.endswith('.csv') or n.endswith('.txt')])
+        if not csv_names:
+            return None
+        csv_data = zf.read(csv_names[-1]).decode('utf-8', 'ignore')
+    except Exception:
+        return None
+    
+    lines = csv_data.splitlines()
+    if len(lines) < 2:
+        return None
+    header = lines[0].split(',')
+    for line in lines[1:]:
+        if market_name.upper() not in line.upper():
+            continue
+        cols = line.split(',')
+        if len(cols) < 25:
+            continue
+        try:
+            col = lambda name: cols[header.index(name)] if name in header else None
+            oi = col('Open_Interest_All')
+            out = {
+                "source": url, "market": market_name, "found": True,
+                "method": "csv", "report_type": "financial_futures",
+                "report_date": col('Report_Date_as_YYYY-MM-DD'),
+                "open_interest": int(float(oi)) if oi else None,
+                "dealer_long": int(float(col('Dealer_Positions_Long_All'))) if col('Dealer_Positions_Long_All') else None,
+                "dealer_short": int(float(col('Dealer_Positions_Short_All'))) if col('Dealer_Positions_Short_All') else None,
+                "asset_mgr_long": int(float(col('Asset_Mgr_Positions_Long_All'))) if col('Asset_Mgr_Positions_Long_All') else None,
+                "asset_mgr_short": int(float(col('Asset_Mgr_Positions_Short_All'))) if col('Asset_Mgr_Positions_Short_All') else None,
+                "leveraged_long": int(float(col('Lev_Money_Positions_Long_All'))) if col('Lev_Money_Positions_Long_All') else None,
+                "leveraged_short": int(float(col('Lev_Money_Positions_Short_All'))) if col('Lev_Money_Positions_Short_All') else None,
+            }
+            if out["asset_mgr_long"] and out["asset_mgr_short"] and out["leveraged_long"] and out["leveraged_short"]:
+                am_net = out["asset_mgr_long"] - out["asset_mgr_short"]
+                lev_net = out["leveraged_long"] - out["leveraged_short"]
+                if am_net > 0 and lev_net < 0: out["position_signal"] = "🟢 实需看多+投机看空 → 关注反转"
+                elif am_net < 0 and lev_net > 0: out["position_signal"] = "🔴 实需看空+投机看多 → 关注反转"
+                elif am_net > 0 and lev_net > 0: out["position_signal"] = "🟢 一致看多"
+                elif am_net < 0 and lev_net < 0: out["position_signal"] = "🔴 一致看空"
+                else: out["position_signal"] = "⚪ 中性"
+            return out
+        except (ValueError, IndexError):
+            continue
+    return None
+
+
 def extract_cftc_financial(symbol: str) -> Dict[str, Any]:
     market = CFTC_FINANCIAL_MARKETS.get(symbol)
     if not market:
         return {}
+    
+    # ── 优先：结构化 CSV ──
+    csv_result = _cftc_financial_csv(market)
+    if csv_result:
+        return csv_result
+    
+    # ── 降级：HTML 爬虫 ──
     url = "https://www.cftc.gov/dea/options/financial_lof.htm"
     try:
         html = fetch_text(url)
     except Exception:
-        return {"source": url, "market": market, "found": False, "error": "fetch failed"}
+        return {"source": url, "market": market, "found": False, "error": "fetch failed", "method": "html_fallback"}
     idx = html.upper().find(market.upper())
     if idx < 0:
-        return {"source": url, "market": market, "found": False, "error": "market not in page"}
+        return {"source": url, "market": market, "found": False, "error": "market not in page", "method": "html_fallback"}
     # 窗口扩到 3000，与 futures 统一
     block = html[idx:idx + 3000]
     lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
@@ -239,7 +316,7 @@ def extract_cftc_financial(symbol: str) -> Dict[str, Any]:
     pos_line = lines[pos_idx + 1] if pos_idx >= 0 and pos_idx + 1 < len(lines) else ""
     row = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", pos_line)]
     
-    out = {"source": url, "market": market, "found": True, "report_type": "financial_lof"}
+    out = {"source": url, "market": market, "found": True, "report_type": "financial_lof", "method": "html_fallback"}
     if oi_match:
         out["open_interest"] = int(oi_match.group(0).replace(",", ""))
     
@@ -280,12 +357,20 @@ _COUNTERPARTY_RATE_PROXY = {
     # (ticker, is_yield, note)
     # is_yield=False 表示 ticker 是期货价格（涨=收益率跌），需要反向解读
     "EURUSD": ("BUND=F", False, "德国 Euro-Bund 期货 — 价涨=收益率跌→EUR弱"),
-    "USDJPY": (None, True, "日本10Y — Yahoo 无免费源，手动查 BOJ 政策利率"),
+    "USDJPY": ("BWX", True, "BWX(国际国债ETF) — 含大量日元债，方向近似"),
     "GBPUSD": ("BUND=F", False, "英国 Gilt — Yahoo 无可靠 ticker，暂用 Bund 近似"),
-    "AUDUSD": (None, True, "澳洲10Y — Yahoo 无免费源，手动查 RBA 政策利率"),
-    "USDCHF": (None, True, "瑞士10Y — Yahoo 无免费源"),
-    "USDCNH": (None, True, "中国10Y — Yahoo 无免费源"),
+    "AUDUSD": ("BWX", True, "BWX(国际国债ETF) — 含澳元债敞口，方向近似"),
+    "USDCHF": ("BWX", True, "BWX(国际国债ETF) — 含 CHF 债敞口，方向近似"),
+    "USDCNH": ("BWX", True, "BWX(国际国债ETF) — 含人民币债敞口，方向近似"),
     "DXY": ("^TNX", True, "DXY 无对手方 — 仅美元侧"),
+}
+
+# 备选 ticker 链：主 ticker 拉不到时依次尝试
+_COUNTERPARTY_FALLBACK = {
+    "USDJPY": ["BWX", "BNDX"],   # BWX→BNDX(全国际债) 降级
+    "AUDUSD": ["BWX", "BNDX"],
+    "USDCHF": ["BWX", "BNDX"],
+    "USDCNH": ["BWX", "BNDX"],
 }
 
 
@@ -293,26 +378,35 @@ def _fetch_counterparty_rate(symbol: str) -> dict | None:
     """尝试拉对手国国债收益率/期货作为利率代理。
     
     免费数据源限制：Yahoo Finance 仅有美德等主要国家 ticker。
+    无直接 ticker 时降级到国际债券 ETF（BWX/BNDX）作为方向代理。
     期货价格 ticker (is_yield=False) 需反向解读：价涨=收益率跌=货币弱。
-    无法获取时返回 None 并在输出中明确标注。
     """
     entry = _COUNTERPARTY_RATE_PROXY.get(symbol)
     if entry is None:
         return {"note": "未知货币对", "yield_proxy": None, "is_yield": True}
     ticker, is_yield, note = entry
-    if ticker is None:
-        return {"note": note, "yield_proxy": None, "is_yield": True}
-    try:
-        q = fetch_quote(ticker)
-        return {
-            "ticker": ticker,
-            "yield_proxy": q.get("price"),
-            "change_pct": q.get("change_pct", 0),
-            "is_yield": is_yield,
-            "note": note,
-        }
-    except Exception:
-        return {"ticker": ticker, "yield_proxy": None, "is_yield": is_yield, "note": f"{note} (拉取失败)"}
+    
+    # 主 ticker + 备选链
+    tickers_to_try = [ticker] if ticker else []
+    tickers_to_try.extend(_COUNTERPARTY_FALLBACK.get(symbol, []))
+    
+    for t in tickers_to_try:
+        try:
+            q = fetch_quote(t)
+            if q and q.get("price"):
+                return {
+                    "ticker": t,
+                    "yield_proxy": q.get("price"),
+                    "change_pct": q.get("change_pct", 0),
+                    "is_yield": is_yield,
+                    "note": f"{note} → 实际使用 {t}",
+                }
+        except Exception:
+            continue
+    
+    # 全部失败
+    tried = ', '.join(tickers_to_try) if tickers_to_try else '无可用 ticker'
+    return {"ticker": ticker, "yield_proxy": None, "is_yield": is_yield, "note": f"{note} (拉取失败: {tried})"}
 
 
 def _dxy_trend(dxy_data: dict) -> str:

@@ -16,6 +16,20 @@ from typing import Any, Dict, List
 
 USER_AGENT = "Mozilla/5.0"
 
+# ── 全局 Yahoo Finance 速率限制 ──
+_YF_LAST_CALL = 0.0
+_YF_MIN_INTERVAL = 0.5
+
+
+def _yf_throttle():
+    global _YF_LAST_CALL
+    import time as _time
+    now = _time.monotonic()
+    wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
+    if wait > 0:
+        _time.sleep(wait)
+    _YF_LAST_CALL = _time.monotonic()
+
 SYMBOL_MAP = {
     "CL": {"ticker": "CL=F", "label": "WTI Crude Oil", "kind": "energy", "news": "WTI oil"},
     "GC": {"ticker": "GC=F", "label": "Gold", "kind": "metal", "news": "gold price"},
@@ -95,6 +109,7 @@ def to_float(value: Any) -> float | None:
 
 
 def fetch_chart(ticker: str, interval: str, range_: str) -> Dict[str, Any]:
+    _yf_throttle()
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ticker)}?interval={interval}&range={range_}"
     data = fetch_json(url)
     result = data["chart"]["result"][0]
@@ -172,26 +187,104 @@ def fetch_quote_snapshot(ticker: str) -> Dict[str, Any]:
     }
 
 
+def _cftc_from_csv(url: str, market_name: str) -> Dict[str, Any] | None:
+    """从 CFTC 年度 ZIP/CSV 提取数据 — 比 HTML 爬虫可靠得多。
+    
+    CSV 列: Market_and_Exchange_Names, Report_Date_as_YYYY-MM-DD,
+    Open_Interest_All, NonComm_Positions_Long_All, NonComm_Positions_Short_All,
+    Comm_Positions_Long_All, Comm_Positions_Short_All, ...
+    """
+    import io, zipfile
+    from datetime import datetime as dt
+    try:
+        resp = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}), timeout=30)
+        zf = zipfile.ZipFile(io.BytesIO(resp.read()))
+        # 取最新的 CSV 文件（通常只有一个）
+        csv_names = [n for n in zf.namelist() if n.endswith('.csv') or n.endswith('.txt')]
+        if not csv_names:
+            return None
+        # 按年份取最新的
+        csv_name = sorted(csv_names)[-1]
+        csv_data = zf.read(csv_name).decode('utf-8', 'ignore')
+    except Exception:
+        return None
+    
+    lines = csv_data.splitlines()
+    if len(lines) < 2:
+        return None
+    header = lines[0].split(',')
+    # 找目标市场行
+    for line in lines[1:]:
+        if market_name.upper() not in line.upper():
+            continue
+        cols = line.split(',')
+        if len(cols) < 15:
+            continue
+        try:
+            col = lambda name: cols[header.index(name)] if name in header else None
+            oi = col('Open_Interest_All')
+            nc_long = col('NonComm_Positions_Long_All')
+            nc_short = col('NonComm_Positions_Short_All')
+            c_long = col('Comm_Positions_Long_All')
+            c_short = col('Comm_Positions_Short_All')
+            report_date = col('Report_Date_as_YYYY-MM-DD')
+            out = {
+                "source": url, "market": market_name, "found": True,
+                "method": "csv", "report_date": report_date,
+                "open_interest": int(float(oi)) if oi else None,
+                "non_commercial_long": int(float(nc_long)) if nc_long else None,
+                "non_commercial_short": int(float(nc_short)) if nc_short else None,
+                "commercial_long": int(float(c_long)) if c_long else None,
+                "commercial_short": int(float(c_short)) if c_short else None,
+            }
+            if out["non_commercial_long"] and out["non_commercial_short"]:
+                out["non_commercial_net"] = out["non_commercial_long"] - out["non_commercial_short"]
+            if out["commercial_long"] and out["commercial_short"]:
+                out["commercial_net"] = out["commercial_long"] - out["commercial_short"]
+            # 位置信号
+            if out["non_commercial_long"] and out["non_commercial_short"]:
+                ratio = out["non_commercial_long"] / max(out["non_commercial_short"], 1)
+                if ratio > 3: out["position_signal"] = "🟢 投机极度看多"
+                elif ratio > 2: out["position_signal"] = "🟢 投机偏多"
+                elif ratio < 0.33: out["position_signal"] = "🔴 投机极度看空"
+                elif ratio < 0.5: out["position_signal"] = "🔴 投机偏空"
+                else: out["position_signal"] = "⚪ 中性"
+            return out
+        except (ValueError, IndexError):
+            continue
+    return None
+
+
 def extract_cftc_block(symbol: str) -> Dict[str, Any]:
     spec = CFTC_FUTURES_MARKETS.get(symbol)
     if not spec:
         return {}
     url, market = spec
+    
+    # ── 优先：结构化 CSV（年度 ZIP）──
+    year = datetime.now().year
+    csv_url = f"https://www.cftc.gov/files/dea/history/fut_disagg_txt_{year}.zip"
+    csv_result = _cftc_from_csv(csv_url, market)
+    if csv_result:
+        return csv_result
+    # 试试上一年（年初可能还没更新）
+    csv_result = _cftc_from_csv(f"https://www.cftc.gov/files/dea/history/fut_disagg_txt_{year-1}.zip", market)
+    if csv_result:
+        csv_result["note"] = f"使用 {year-1} 年数据（{year} 年 ZIP 尚未发布）"
+        return csv_result
+    
+    # ── 降级：HTML 爬虫 ──
     try:
         html = fetch_text(url)
     except Exception:
-        return {"source": url, "market": market, "found": False, "error": "fetch failed"}
+        return {"source": url, "market": market, "found": False, "error": "fetch failed", "method": "html_fallback"}
     idx = html.upper().find(market.upper())
     if idx < 0:
-        return {"source": url, "market": market, "found": False, "error": "market not in page"}
-    # 窗口从 1600 扩到 3000，避免市场名出现在靠后位置时截断
+        return {"source": url, "market": market, "found": False, "error": "market not in page", "method": "html_fallback"}
     block = html[idx:idx + 3000]
-    out = {"source": url, "market": market, "found": True}
+    out = {"source": url, "market": market, "found": True, "method": "html_fallback"}
     
-    # 尝试多种段落标记
     lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-    
-    # ── OI 提取：多种模式 ──
     oi_line = ""
     for pattern in ["OPEN INTEREST:", "OPENINTEREST:", "Open interest is", "Open Interest:"]:
         oi_line = next((ln for ln in lines if pattern.upper() in ln.upper()), "")
@@ -201,52 +294,40 @@ def extract_cftc_block(symbol: str) -> Dict[str, Any]:
     if oi_match:
         out["open_interest"] = int(oi_match.group(0).replace(",", ""))
     
-    # ── 持仓数据提取：多种行标记 ──
     commit_idx = -1
     for marker in ["COMMITMENTS", "Commitments", "Positions", "POSITIONS"]:
         commit_idx = next((i for i, ln in enumerate(lines) if ln.upper() == marker.upper()), -1)
         if commit_idx >= 0:
             break
-    # fallback: 找含 "LONG" 和 "SHORT" 的行
     if commit_idx < 0:
         commit_idx = next((i for i, ln in enumerate(lines) if "LONG" in ln.upper() and "SHORT" in ln.upper()), -1)
     
     nums_line = lines[commit_idx + 1] if commit_idx >= 0 and commit_idx + 1 < len(lines) else ""
     row = [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", nums_line)]
     
-    # ── 根据列数推断数据布局 ──
     if len(row) >= 8:
         out["non_commercial_long"] = row[0]
         out["non_commercial_short"] = row[1]
         out["commercial_long"] = row[3]
         out["commercial_short"] = row[4]
-        # 计算净头寸
         out["non_commercial_net"] = row[0] - row[1]
         out["commercial_net"] = row[3] - row[4]
     elif len(row) >= 4:
-        # 降级：只有 4 列时尝试最佳猜测
         out["non_commercial_long"] = row[0]
         out["non_commercial_short"] = row[1]
         out["non_commercial_net"] = row[0] - row[1]
     else:
         out["parse_warning"] = f"expected >=8 cols, got {len(row)}"
-        out["raw_nums"] = row
     
-    # ── 验证 ──
     nc_long = out.get("non_commercial_long", 0)
     nc_short = out.get("non_commercial_short", 0)
     if nc_long > 0 and nc_short > 0:
         ratio = nc_long / max(nc_short, 1)
-        if ratio > 3:
-            out["position_signal"] = "🟢 投机极度看多"
-        elif ratio > 2:
-            out["position_signal"] = "🟢 投机偏多"
-        elif ratio < 0.33:
-            out["position_signal"] = "🔴 投机极度看空"
-        elif ratio < 0.5:
-            out["position_signal"] = "🔴 投机偏空"
-        else:
-            out["position_signal"] = "⚪ 中性"
+        if ratio > 3: out["position_signal"] = "🟢 投机极度看多"
+        elif ratio > 2: out["position_signal"] = "🟢 投机偏多"
+        elif ratio < 0.33: out["position_signal"] = "🔴 投机极度看空"
+        elif ratio < 0.5: out["position_signal"] = "🔴 投机偏空"
+        else: out["position_signal"] = "⚪ 中性"
     
     return out
 
