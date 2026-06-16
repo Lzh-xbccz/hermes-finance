@@ -52,7 +52,7 @@ wait
 ```
 
 > ⚠️ `format_standard_kline(df, Freq.F240)` — 必须传 Freq 参数！ 4H=Freq.F240, 1H=Freq.F60。  
-> 参考 `czsc-ccxt-analysis` 技能获取完整 API（含 `resample_bars`/`kline_pro`/信号函数/坑点）。
+> 参考 `czsc-ccxt-analysis` 技能获取完整 API（含 `resample_bars`/信号函数/坑点/lightweight-charts）。
 
 ### 阶段2：因果叙事构建
 （同v7.0，略）

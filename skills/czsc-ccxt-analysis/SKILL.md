@@ -1,14 +1,14 @@
 ---
 name: czsc-ccxt-analysis
-description: "缠论技术分析 — czsc官方全API，CCXT数据源，多级别联立，CzscTrader信号生成，plot_czsc_chart官方可视化。触发: 缠论/czsc/中枢/分型/笔"
-version: 3.2.0
+description: "缠论技术分析 — czsc官方全API，CCXT数据源，多级别联立，lightweight-charts可视化+自动Markdown报告。触发: 缠论/czsc/中枢/分型/笔"
+version: 4.0.0
 author: Hermes
 ---
 
-# 缠论技术分析 (czsc v3.2 — 全API + 信号系统)
+# 缠论技术分析 (czsc v4.0 — v1.0.0rc8 全API + lightweight-charts)
 
 > 基于 waditu/czsc v1.0.0rc8（2026-06-16 从源码构建）  
-> 官方全链路：`ccxt_connector → CZSC → 信号函数 → plot_czsc_chart / lightweight`
+> 官方全链路：`ccxt_connector → CZSC → call_signal → lightweight-charts → Markdown 报告`
 
 ---
 
@@ -19,12 +19,7 @@ author: Hermes
 ### 从源码升级
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-pip install maturin --break-system-packages
-git clone --depth 1 https://github.com/waditu/czsc.git /tmp/czsc
-cd /tmp/czsc && maturin build --release  # 首次 15-25 分钟
-pip install target/wheels/*.whl --break-system-packages --force-reinstall
+bash install.sh  # 一键: Rust + czsc编译 + Python依赖
 ```
 
 详见 `references/czsc-build.md`
@@ -39,7 +34,7 @@ pip install target/wheels/*.whl --break-system-packages --force-reinstall
 from czsc.connectors.ccxt_connector import get_raw_bars
 from czsc import format_standard_kline, Freq
 
-df = get_raw_bars('ZECUSDT', '4h', sdt='20260401', edt='20260616')
+df = get_raw_bars('BTCUSDT', '4h', sdt='20260601', edt='20260616')
 bars = format_standard_kline(df, Freq.F240)  # ⚠️ 必须传 Freq！
 ```
 
@@ -51,34 +46,29 @@ c.bi_list       # List[BI]: .fx_a, .fx_b, .direction, .power, .high, .low
 c.fx_list       # List[FX]: .dt, .fx, .has_zs, .low, .high
 c.ubi_fxs       # 中枢信息在这里： [f for f in c.ubi_fxs if f.has_zs]
 c.ubi           # ⚠️ List[str]，不是BI对象！
-c.signals       # 构造时为空，信号来自信号函数调用
 ```
 
-### 3. 信号系统（256个函数）
+### 3. 信号系统（222个信号，v1.0.0rc8）
 
 ```python
-from czsc.signals import (
-    cxt_first_buy_V221126,      # 一买
-    cxt_first_sell_V221126,     # 一卖
-    cxt_second_bs_V230320,      # 二买二卖
-    cxt_third_buy_V230228,      # 三买
-    cxt_decision_V240614,       # 综合决策（⭐最重要）
-    cxt_bi_end_V230104,         # 笔结束
-)
-res = cxt_decision_V240614(c)  # → OrderedDict
+from czsc._native.signals import call_signal
+
+# v1.0.0rc8 新 API：信号名字符串调用
+res = call_signal('cxt_first_buy_V221126', c)   # 一买
+res = call_signal('cxt_decision_V240614', c)     # 综合决策（⭐最重要）
+res = call_signal('cxt_bi_end_V230104', c)       # 笔结束
+
+# 结果: [Signal('240分钟_D1B_BUY1_其他_任意_任意_0')]
 ```
 
-### 4. 可视化
+### 4. 可视化（lightweight-charts）
 
 ```python
-# 方式A: lightweight-charts（推荐，自包含离线HTML）
-from czsc.utils.plotting.lightweight import plot_czsc, plot_czsc_trader
-html = plot_czsc(c, output="html")
+from czsc.utils.plotting.lightweight import plot_czsc
 
-# 方式B: plot_czsc_chart（Plotly）
-from czsc.utils.plotting.kline import plot_czsc_chart
-chart = plot_czsc_chart(c)
-chart.fig.write_html('out.html', include_plotlyjs='cdn')
+# 暗色主题
+plot_czsc(c, path='chart.html', theme='dark', title='BTC 4H')
+plot_czsc(c, path='chart.html', theme='dark', tail_bars=200)  # 仅最近200根
 ```
 
 ---
@@ -125,7 +115,7 @@ chart.fig.write_html('out.html', include_plotlyjs='cdn')
 ```
 
 ### 3. CZSC.to_echarts/to_plotly 返回 "not implemented"
-用 `plot_czsc_chart()` 或 `plot_czsc()` 替代
+用 `lightweight.plot_czsc()` 替代，支持 dark theme + tail_bars
 
 ### 4. 日线漏笔（MIN_BI_LEN=6）
 快速崩盘用 4H (F240) 分析
@@ -162,6 +152,7 @@ Freq.D/W/M ✅ | Freq.F240/F60 ❌（市场时区问题）
 | 15min | F15 | `15m` | 入场确认 |
 
 ```bash
-# 快速使用
-python3 /root/.hermes/scripts/czsc_analyze.py SYMBOL --period 4h --compact --signals
+# 多级别联立 + 信号 + dark 图表 + 报告
+python3 scripts/czsc_analyze.py BTCUSDT --chart --report
+python3 scripts/czsc_analyze.py ETHUSDT --freqs 4h,1h,15m --chart
 ```
