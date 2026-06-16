@@ -42,15 +42,17 @@ class FeishuNotifier:
         """通过 baostock 批量查询股票名称，返回 {code: name} 映射。"""
         import baostock as bs
         bs.login()
-        mapping = {}
-        for code in symbols:
-            prefix = "sh" if code.startswith(("6", "9")) else "sz"
-            rs = bs.query_stock_basic(code=f"{prefix}.{code}")
-            while rs.next():
-                row = rs.get_row_data()
-                mapping[code] = row[1]  # 第2个字段是股票名称
-        bs.logout()
-        return mapping
+        try:
+            mapping = {}
+            for code in symbols:
+                prefix = "sh" if code.startswith(("6", "9")) else "sz"
+                rs = bs.query_stock_basic(code=f"{prefix}.{code}")
+                while rs.next():
+                    row = rs.get_row_data()
+                    mapping[code] = row[1]  # 第2个字段是股票名称
+            return mapping
+        finally:
+            bs.logout()
 
     def _build_card(self, symbols: list[str], strategy_name: str) -> dict:
         today = date.today().strftime("%Y-%m-%d")

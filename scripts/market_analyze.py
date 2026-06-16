@@ -27,14 +27,6 @@ MARKET_SCRIPTS = {
     "us-equity": os.path.join(SKILL_BASE, "us-equity-market-analysis", "scripts", "us_equity_fetch.py"),
 }
 
-ANALYZE_SCRIPTS = {
-    "a-share": os.path.join(_PROJECT_ROOT, "scripts", "a_share_analyze.py"),
-    "futures": os.path.join(SKILL_BASE, "futures-market-analysis", "scripts", "futures_analyze.py"),
-    "forex": os.path.join(SKILL_BASE, "forex-market-analysis", "scripts", "forex_analyze.py"),
-    "us-equity": os.path.join(SKILL_BASE, "us-equity-market-analysis", "scripts", "us_equity_analyze.py"),
-}
-
-
 def run_script(cmd, timeout=120):
     """运行脚本并返回输出"""
     try:

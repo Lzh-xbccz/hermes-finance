@@ -59,6 +59,7 @@ class DataEngine:
     def __init__(self, settings: Settings) -> None:
         self.db_path: str = settings.db_path
         self.start_date: str = settings.start_date
+        self._conn: sqlite3.Connection | None = None
         self._init_db()
 
     def _init_db(self) -> None:
@@ -70,21 +71,22 @@ class DataEngine:
         logger.info(f"数据库初始化完成：{self.db_path}")
 
     def _get_last_date(self, symbol: str) -> str | None:
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                "SELECT MAX(date) FROM stock_daily WHERE symbol = ?",
-                (symbol,),
-            ).fetchone()
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+        row = self._conn.execute(
+            "SELECT MAX(date) FROM stock_daily WHERE symbol = ?",
+            (symbol,),
+        ).fetchone()
         return row[0] if row and row[0] else None
 
     def get_ohlcv(self, symbol: str) -> pd.DataFrame:
-        with sqlite3.connect(self.db_path) as conn:
-            df = pd.read_sql(
-                "SELECT * FROM stock_daily WHERE symbol = ? ORDER BY date",
-                conn,
-                params=(symbol,),
-            )
-        return df
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+        return pd.read_sql(
+            "SELECT * FROM stock_daily WHERE symbol = ? ORDER BY date",
+            self._conn,
+            params=(symbol,),
+        )
 
     @staticmethod
     def _to_baostock_code(symbol: str) -> str:
@@ -326,8 +328,9 @@ class DataEngine:
             bs.logout()
 
     def get_local_symbols(self) -> list[str]:
-        with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute(
-                "SELECT DISTINCT symbol FROM stock_daily"
-            ).fetchall()
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+        rows = self._conn.execute(
+            "SELECT DISTINCT symbol FROM stock_daily"
+        ).fetchall()
         return [row[0] for row in rows]
