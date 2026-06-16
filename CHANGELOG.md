@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.1 (2026-06-17) — 分析逻辑修补
+## v1.0.1 (2026-06-17) — 分析逻辑修补 + 补充
 
 ### 🔴 修复
 
@@ -12,6 +12,13 @@
 
 - **共振评分** — 阈值从 1/3 收紧到 2/4，防止单级别笔方向触发假"偏多/偏空"
 - **BTC-SPY 联动** — 从不可靠的 24h 快照改为 5 日趋势比较，失败时降级到 24h
+
+### 🟢 补充 (2026-06-17)
+
+- **`forex_analyze.py`** — 接入新 rate 结构（5s10s/curve_signal/counterparty/diff_signal/central_bank_events），不再裸读 `proxies["^TNX"]`
+- **`forex_analyze.py`** — 新增 `rates_summary()` 函数，报告中展示完整利差拆解
+- **`forex_analyze.py`** — `key_block_gaps()` 改用 `structured_drivers["rates"]` 检查主导力量
+- **路径修复** — 4个 analyze 脚本的 FETCHER 路径从硬编码 `/root/.hermes/` 改为 `Path(__file__).parent` 相对路径（forex/us-equity/a-share/futures）
 
 ---
 

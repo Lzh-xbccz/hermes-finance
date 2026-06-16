@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-FETCHER = Path("/root/.hermes/skills/research/forex-market-analysis/scripts/forex_fetch.py")
+FETCHER = Path(__file__).resolve().parent / "forex_fetch.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -144,11 +144,13 @@ def key_block_gaps(data: Dict[str, Any]) -> List[str]:
     if len(data.get("daily_90d", [])) < 20 or len(data.get("agg_4h_10d", [])) < 12 or len(data.get("hourly_10d", [])) < 24:
         gaps.append("技术结构")
     proxies = data.get("proxies", {})
-    for required in ["DX-Y.NYB", "^TNX"]:
-        if not proxies.get(required):
-            gaps.append("主导力量")
-            break
-    if len([k for k, v in proxies.items() if v]) < 2:
+    rates = data.get("structured_drivers", {}).get("rates", {})
+    # 主导力量：需要 DXY + 利率数据（us_10y/us_5y 或 proxies 中的 ^TNX）
+    dxy_ok = bool(proxies.get("DX-Y.NYB")) or bool(rates.get("dxy"))
+    rates_ok = bool(rates.get("us_10y")) or bool(proxies.get("^TNX"))
+    if not (dxy_ok and rates_ok):
+        gaps.append("主导力量")
+    if len([k for k, v in proxies.items() if v]) < 2 and not rates:
         gaps.append("交叉验证")
     return gaps
 
@@ -176,17 +178,26 @@ def direction(data: Dict[str, Any]) -> str:
 
 
 def macro_summary(data: Dict[str, Any]) -> str:
+    """宏观代理摘要：DXY + VIX + 利率曲线 + 利差信号"""
     proxies = data.get("proxies", {})
+    rates = data.get("structured_drivers", {}).get("rates", {})
     parts = []
-    dxy = proxies.get("DX-Y.NYB", {})
-    tnx = proxies.get("^TNX", {})
+    dxy = rates.get("dxy") or proxies.get("DX-Y.NYB", {})
     vix = proxies.get("^VIX", {})
     if dxy:
-        parts.append(f"DXY {dxy.get('change_pct', 0):+.2f}%")
-    if tnx:
-        parts.append(f"10Y {tnx.get('change_pct', 0):+.2f}%")
+        dxy_chg = dxy.get("change_pct", 0)
+        dxy_trend = rates.get("dxy_trend", "")
+        parts.append(f"DXY {dxy_chg:+.2f}%{(' '+dxy_trend) if dxy_trend else ''}")
     if vix:
         parts.append(f"VIX {vix.get('price', 0):.2f}")
+    # 收益率曲线信号
+    curve_signal = rates.get("curve_signal", "")
+    if curve_signal:
+        parts.append(f"曲线: {curve_signal}")
+    # 利差信号
+    diff_signal = rates.get("diff_signal", "")
+    if diff_signal and diff_signal != "N/A":
+        parts.append(f"利差: {diff_signal}")
     if data["symbol"] == "USDJPY":
         parts.append("关注美债收益率与日银/干预风险")
     elif data["symbol"] == "USDCNH":
@@ -194,6 +205,47 @@ def macro_summary(data: Dict[str, Any]) -> str:
     else:
         parts.append("关注美元与央行路径")
     return "；".join(parts)
+
+
+def rates_summary(data: Dict[str, Any]) -> str:
+    """收益率曲线 + 对手国利差详细拆解"""
+    rates = data.get("structured_drivers", {}).get("rates", {})
+    if not rates:
+        return "利率数据暂缺"
+    lines = []
+    us_10y = rates.get("us_10y", {})
+    us_5y = rates.get("us_5y", {})
+    if us_10y.get("price") and us_5y.get("price"):
+        curve = rates.get("curve_5s10s", "N/A")
+        lines.append(f"US 10Y: {us_10y['price']:.2f}% | 5Y: {us_5y['price']:.2f}% | 5s10s: {curve}%")
+    curve_signal = rates.get("curve_signal", "")
+    if curve_signal:
+        lines.append(f"曲线信号: {curve_signal}")
+    cp = rates.get("counterparty", {})
+    if cp:
+        cp_note = cp.get("note", "")
+        cp_ticker = cp.get("ticker", "?")
+        cp_val = cp.get("yield_proxy")
+        if cp_val is not None:
+            if cp.get("is_yield"):
+                lines.append(f"对手利率({cp_ticker}): {cp_val:.2f}% — {cp_note}")
+            else:
+                lines.append(f"对手期货({cp_ticker}): {cp_val:.2f} ({cp.get('change_pct', 0):+.2f}%) — {cp_note}")
+        else:
+            lines.append(f"对手利率({cp_ticker}): 无数据 — {cp_note}")
+    diff = rates.get("rate_differential")
+    if diff is not None:
+        lines.append(f"USD-对手利差: {diff:+.2f}%")
+    diff_signal = rates.get("diff_signal", "")
+    if diff_signal and diff_signal != "N/A":
+        lines.append(f"利差信号: {diff_signal}")
+    cbe = rates.get("central_bank_events", [])
+    if cbe:
+        lines.append("央行事件: " + " / ".join(
+            f"{e.get('date','?')} {e.get('country','?')} {e.get('title','')}"
+            for e in cbe[:3]
+        ))
+    return "\n".join(f"- {l}" for l in lines)
 
 
 def macro_event_summary(data: Dict[str, Any]) -> str:
@@ -286,6 +338,8 @@ def build_report(data: Dict[str, Any]) -> str:
         "",
         "### 主导力量立场",
         f"- 利率/美元代理：{macro_summary(data)}",
+        f"- 收益率曲线 & 利差拆解：",
+        f"{rates_summary(data)}",
         f"- CFTC 摘要：{cftc_summary(data)}",
         f"- 本周高影响事件：{macro_event_summary(data)}",
         f"- 主导叙事：{'日银/干预风险' if data['symbol'] == 'USDJPY' else '人民币管理风险' if data['symbol'] == 'USDCNH' else '美元与央行路径'}",
@@ -293,7 +347,7 @@ def build_report(data: Dict[str, Any]) -> str:
         "",
         "### 六维判断",
         f"- 技术面：当前价 {last:.5f}，4H 结构为主",
-        "- 市场结构：看利差预期、美元方向与风险偏好",
+        "- 市场结构：看 5s10s 利差、对手国利差、美元方向与风险偏好",
         f"- 主导力量：{macro_summary(data)}；{cftc_summary(data)}；{macro_event_summary(data)}",
         "- 情绪面：通过 VIX 与 risk-on/risk-off 辅助判断",
         "- 宏观面：央行路径和数据窗口优先级高",

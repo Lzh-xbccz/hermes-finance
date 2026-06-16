@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-FETCHER = Path("/root/.hermes/skills/research/us-equity-market-analysis/scripts/us_equity_fetch.py")
+FETCHER = Path(__file__).resolve().parent / "us_equity_fetch.py"
 
 
 def parse_args() -> argparse.Namespace:
