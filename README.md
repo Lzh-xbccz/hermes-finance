@@ -9,9 +9,7 @@
 
 ## 🏗️ 项目架构
 
-```
-hermes-finance/
-├── skills/                          # 8 个分析技能
+```\nhermes-finance/\n├── requirements.txt             # Python 依赖（含 czsc GitHub 源）\n├── install.sh                   # 一键安装脚本\n├── skills/                      # 8 个分析技能
 │   ├── crypto-market-analysis/      # 🟠 加密货币（BTC/ETH/山寨）
 │   ├── futures-market-analysis/     # 🟡 商品期货（CL/GC/ES/NG）
 │   ├── forex-market-analysis/       # 🔵 外汇（DXY/EURUSD/JPY）
@@ -105,9 +103,8 @@ res = cxt_first_buy_V221126(c)    # 一买？
 ```
 
 **可视化：**
-- `plot_czsc_chart()` — Plotly 版，K 线 + 分型标记 + 笔连线 + 中枢矩形 + 成交量 + MACD
-- `kline_pro()` — ECharts 版，轻量级替代方案
-- `plot_czsc()` — lightweight-charts 版（需从 GitHub 源码构建）
+- `plot_czsc()` — lightweight-charts 交互式 K 线图，含分型/笔/中枢标记
+- `CzscTrader` — 多级别交易信号系统，内置 222 个信号
 
 ### 5. `multi-market-analysis` — 智能路由 🔀
 
@@ -156,35 +153,47 @@ res = cxt_first_buy_V221126(c)    # 一买？
 
 ## ⚡ 快速开始
 
-### 环境
+> ⚠️ **czsc 必须从 GitHub 源码安装**（PyPI 的 0.10.x 是旧版 Python 实现，不含 Rust 核心）
+
+### 一键安装
 
 ```bash
-pip install czsc ccxt pandas plotly numpy
+# 1. 安装 Rust 工具链（czsc 编译需要）
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+
+# 2. 安装 Python 依赖
+pip install --break-system-packages git+https://github.com/waditu/czsc.git
+pip install --break-system-packages ccxt pandas plotly
 ```
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| czsc | ≥1.0.0 | 缠论核心（Rust 实现，PyO3 绑定） |
-| ccxt | ≥4.5 | 加密货币数据（Binance 现货+期货） |
-| pandas | ≥3.0 | 数据处理 |
-| plotly | ≥6.0 | K 线图表可视化 |
+或者直接：
+
+```bash
+bash install.sh
+```
+
+| 依赖 | 安装方式 | 用途 |
+|------|---------|------|
+| czsc | `git+https://github.com/waditu/czsc.git` (v1.0.0rc8) | 缠论核心（Rust + PyO3） |
+| ccxt | `pip install ccxt` (≥4.5) | 加密货币数据（Binance 现货+期货） |
+| pandas | `pip install pandas` (≥2.0) | 数据处理 |
+| plotly | `pip install plotly` (≥5.0) | lightweight-charts 渲染依赖 |
 
 ### 运行
 
 ```bash
-# 缠论分析（BTC 4H + 信号 + 图表）
+# 缠论分析（BTC 4H + 信号）
+python scripts/czsc_analyze.py BTCUSDT 4h --signals --compact
+
+# 缠论 + lightweight-charts 图表
 python scripts/czsc_analyze.py BTCUSDT 4h --signals --chart
 
-# 缠论 + ECharts 图表
-python scripts/czsc_analyze.py BTCUSDT 4h --signals --echarts
-
 # 加密货币完整八维分析
-cd skills/crypto-market-analysis
-python scripts/fetch_data.py BTC all
+python skills/crypto-market-analysis/scripts/fetch_data.py BTC all
 
 # 期货分析
-cd skills/futures-market-analysis
-python scripts/futures_analyze.py GC
+python skills/futures-market-analysis/scripts/futures_fetch.py GC
 
 # 多市场路由
 python skills/multi-market-analysis/scripts/route_market.py

@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-缠论分析脚本 v3.0 — GitHub 源码对照版
+缠论分析脚本 v3.1 — czsc v1.0.0rc8 (Rust 核心)
 用法: python3 czsc_analyze.py [SYMBOL] [PERIOD] [--compact] [--chart] [--signals]
   SYMBOL: 默认 ZECUSDT (不带斜杠)
   PERIOD: 默认 4h
   --compact: 精简输出
-  --chart: 生成HTML图表 (plotly)
-  --echarts: 生成ECharts图表 (kline_pro)
+  --chart: 生成 lightweight-charts HTML 图表
   --signals: 输出买卖点信号
 
-v3.0 修正:
-  - format_standard_kline(df, Freq.F240) 必须传 Freq
-  - 4H → Freq.F240 (非 Freq.F60)
-  - 新增信号系统 (一买/二买/三买/综合决策)
-  - 新增 kline_pro ECharts 图表
-  - 新增 resample_bars 支持
+v3.1 修正 (2026-06-16):
+  - czsc v1.0.0rc8: plot_czsc_chart/kline_pro 已移除，改用 lightweight plot_czsc()
+  - --echarts 自动回退到 lightweight
 """
 import sys
 import os
@@ -22,12 +18,7 @@ from datetime import datetime, timedelta
 
 from czsc.connectors.ccxt_connector import get_raw_bars
 from czsc import CZSC, format_standard_kline, Freq, resample_bars
-from czsc.utils.plotting.kline import plot_czsc_chart
-from czsc.signals import (
-    cxt_first_buy_V221126, cxt_first_sell_V221126,
-    cxt_second_bs_V230320, cxt_third_buy_V230228,
-    cxt_decision_V240614, cxt_bi_end_V230104,
-)
+from czsc._native.signals import call_signal
 
 # ── 参数解析 ──
 symbol = 'ZECUSDT'
@@ -129,18 +120,15 @@ if rem:
 if do_signals:
     print('\n=== 缠论买卖点信号 ===')
     sig_tests = [
-        ('一买', cxt_first_buy_V221126),
-        ('一卖', cxt_first_sell_V221126),
-        ('三买', cxt_third_buy_V230228),
-        ('二买二卖', cxt_second_bs_V230320),
-        ('综合决策', cxt_decision_V240614),
-        ('笔结束', cxt_bi_end_V230104),
+        ('一买', 'cxt_first_buy_V221126'),
+        ('综合决策', 'cxt_decision_V240614'),
+        ('笔结束', 'cxt_bi_end_V230104'),
     ]
-    for name, fn in sig_tests:
+    for name, sig_name in sig_tests:
         try:
-            res = fn(c)
+            res = call_signal(sig_name, c)
             if res:
-                print(f'【{name}】✅ {dict(res)}')
+                print(f'【{name}】✅ {res}')
             else:
                 print(f'【{name}】❌ 无信号')
         except Exception as e:
@@ -148,18 +136,11 @@ if do_signals:
 
 # ── 图表 ──
 if do_chart:
-    outfile = f'/tmp/czsc_{symbol}_{period}_plotly.html'
-    chart = plot_czsc_chart(c, title=f'{symbol} {period}')
-    chart.fig.write_html(outfile, include_plotlyjs='cdn')
-    print(f'\nPlotly图表: {outfile} ({os.path.getsize(outfile)} bytes)')
+    from czsc.utils.plotting.lightweight import plot_czsc
+    outfile = f'/tmp/czsc_{symbol}_{period}.html'
+    plot_czsc(c, path=outfile)
+    print(f'\n图表: {outfile} ({os.path.getsize(outfile)} bytes)')
 
 if do_echarts:
-    from czsc.utils.echarts_plot import kline_pro
-    kdata = [{'dt': str(b.dt), 'open': b.open, 'close': b.close,
-              'high': b.high, 'low': b.low, 'vol': b.vol} for b in c.bars_raw]
-    fxdata = [{'dt': str(fx.dt), 'fx': fx.fx} for fx in c.fx_list]
-    bidata = [{'dt': str(bi.fx_b.dt), 'bi': float(bi.fx_b.fx)} for bi in c.bi_list]
-    outfile = f'/tmp/czsc_{symbol}_{period}_echarts.html'
-    chart = kline_pro(kdata, fx=fxdata, bi=bidata, title=f'{symbol} {period}')
-    chart.render(outfile)
-    print(f'ECharts图表: {outfile} ({os.path.getsize(outfile)} bytes)')
+    print('⚠️ ECharts 在 czsc v1.0.0rc8 中已移除，请使用 --chart (lightweight-charts)')
+    do_chart = True  # fallback to lightweight
