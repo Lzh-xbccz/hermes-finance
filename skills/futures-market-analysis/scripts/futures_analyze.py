@@ -225,12 +225,51 @@ def driver_summary(data: Dict[str, Any]) -> str:
 
 
 def cftc_summary(data: Dict[str, Any]) -> str:
+    """CFTC 持仓摘要 — 支持 CSV 结构化数据 + HTML fallback"""
     cftc = data.get("structured_drivers", {}).get("cftc", {})
     if not cftc or not cftc.get("found"):
         return "CFTC 持仓摘要暂缺"
-    if cftc.get("report_type") == "futures_only":
-        return "CFTC 周报原始摘录可用，但当前解析未做稳健数值归类"
-    return "CFTC 摘要可用但未归类"
+    method = cftc.get("method", "unknown")
+    
+    # 非商业持仓（投机）— CSV 新字段
+    nc_long = cftc.get("non_commercial_long")
+    nc_short = cftc.get("non_commercial_short")
+    nc_net = cftc.get("non_commercial_net")
+    
+    # 商业持仓（套保）
+    c_long = cftc.get("commercial_long")
+    c_short = cftc.get("commercial_short")
+    c_net = cftc.get("commercial_net")
+    
+    # 仓位信号
+    signal = cftc.get("position_signal", "")
+    
+    parts = []
+    if nc_long and nc_short:
+        nc_net_val = nc_net if nc_net else nc_long - nc_short
+        parts.append(f"投机: 多 {nc_long:,} / 空 {nc_short:,} (净 {nc_net_val:+,})")
+    if c_long and c_short:
+        c_net_val = c_net if c_net else c_long - c_short
+        parts.append(f"套保: 多 {c_long:,} / 空 {c_short:,} (净 {c_net_val:+,})")
+    if signal:
+        parts.append(signal)
+    
+    oi = cftc.get("open_interest")
+    if oi:
+        parts.append(f"总持仓: {oi:,}")
+    report_date = cftc.get("report_date", "")
+    if report_date:
+        parts.append(f"报告日: {report_date}")
+    
+    if not parts:
+        if method == "html_fallback":
+            return "CFTC 周报原始摘录可用，但数值未结构化归类"
+        return "CFTC 摘要可用但未归类"
+    
+    return "CFTC(\"{}\") — {}".format(
+        cftc.get("market", "?"),
+        " | ".join(parts)
+    )
 
 
 def structure_levels(rows: List[Dict[str, Any]]) -> Dict[str, float]:

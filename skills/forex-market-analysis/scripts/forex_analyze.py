@@ -260,6 +260,7 @@ def macro_event_summary(data: Dict[str, Any]) -> str:
 
 
 def cftc_summary(data: Dict[str, Any]) -> str:
+    """CFTC 金融期货持仓 — 支持 CSV 结构化 + HTML fallback"""
     cftc = data.get("structured_drivers", {}).get("cftc", {})
     if not cftc or not cftc.get("found"):
         return "CFTC 金融期货持仓暂缺"
@@ -267,13 +268,24 @@ def cftc_summary(data: Dict[str, Any]) -> str:
     ls = cftc.get("leveraged_short")
     al = cftc.get("asset_mgr_long")
     a_s = cftc.get("asset_mgr_short")
+    signal = cftc.get("position_signal", "")
+    method = cftc.get("method", "")
+    report_date = cftc.get("report_date", "")
+    
     if ll is None or ls is None:
         return "CFTC 已抓到但数值不完整"
     lev_bias = "杠杆基金净多" if ll > ls else "杠杆基金净空" if ll < ls else "杠杆基金中性"
+    parts = [f"{lev_bias}（多 {ll:,} / 空 {ls:,}）"]
     if al is not None and a_s is not None:
         am_bias = "资管净多" if al > a_s else "资管净空" if al < a_s else "资管中性"
-        return f"CFTC {lev_bias}（多 {ll:,} / 空 {ls:,}）；{am_bias}（多 {al:,} / 空 {a_s:,}）"
-    return f"CFTC {lev_bias}（多 {ll:,} / 空 {ls:,}）"
+        parts.append(f"{am_bias}（多 {al:,} / 空 {a_s:,}）")
+    if signal:
+        parts.append(signal)
+    if report_date:
+        parts.append(f"报告日: {report_date}")
+    
+    prefix = f"CFTC{'[CSV]' if method == 'csv' else ''}"
+    return f"{prefix} {' | '.join(parts)}"
 
 
 def build_report(data: Dict[str, Any]) -> str:

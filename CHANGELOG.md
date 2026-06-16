@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.2 (2026-06-17) — 结构加固
+## v1.0.2 (2026-06-17) — 结构加固 + 补充
 
 ### 🟡 代码架构
 
@@ -14,6 +14,11 @@
 - **CFTC 结构化 CSV** — futures/forex 优先读 ZIP/CSV（可靠），HTML 爬虫降级为 fallback
 - **对手国利率** — JPY/AUD/CHF/CNH 从"无数据"升级到 BWX/BNDX 国际债券 ETF 代理
 - **Yahoo 全局速率限制** — `_yf_throttle()` 确保请求间隔 ≥ 0.5s，降低 429 触发
+
+### 🟢 补充 (2026-06-17)
+
+- **`futures_analyze.py`** — `cftc_summary()` 从死占位符升级，展示 CSV 新字段（投机/套保多空净仓+仓位信号+报告日）
+- **`forex_analyze.py`** — `cftc_summary()` 增强：新增 `position_signal`/`report_date`/CSV 来源标注
 
 ---
 
