@@ -32,6 +32,65 @@ def _bust_cache(url: str) -> str:
     return f'{url}{sep}_nocache={ts}'
 
 
+# ─── coin_id → Binance symbol 映射 ───
+# 避免 ethereum → ETHEREUMUSDT（Binance 404）的问题
+_COIN_SYMBOL_MAP = {
+    'bitcoin': 'BTCUSDT',
+    'ethereum': 'ETHUSDT',
+    'solana': 'SOLUSDT',
+    'dogecoin': 'DOGEUSDT',
+    'ripple': 'XRPUSDT',
+    'xrp': 'XRPUSDT',
+    'binancecoin': 'BNBUSDT',
+    'cardano': 'ADAUSDT',
+    'avalanche-2': 'AVAXUSDT',
+    'avalanche': 'AVAXUSDT',
+    'chainlink': 'LINKUSDT',
+    'polkadot': 'DOTUSDT',
+    'matic-network': 'MATICUSDT',
+    'polygon': 'POLUSDT',
+    'litecoin': 'LTCUSDT',
+    'uniswap': 'UNIUSDT',
+    'aptos': 'APTUSDT',
+    'arbitrum': 'ARBUSDT',
+    'optimism': 'OPUSDT',
+    'near': 'NEARUSDT',
+    'filecoin': 'FILUSDT',
+    'cosmos': 'ATOMUSDT',
+    'stellar': 'XLMUSDT',
+    'hedera': 'HBARUSDT',
+    'injective-protocol': 'INJUSDT',
+    'injective': 'INJUSDT',
+    'sui': 'SUIUSDT',
+    'pepe': 'PEPEUSDT',
+    'shiba-inu': 'SHIBUSDT',
+    'tron': 'TRXUSDT',
+    'ethers': 'ETHUSDT',
+}
+
+
+def _binance_symbol(coin_id: str) -> str:
+    """将 CoinGecko coin_id 或常见 ticker 映射为 Binance symbol。
+    
+    支持的输入格式:
+    - CoinGecko coin_id: 'bitcoin', 'ethereum', 'solana' ...
+    - 直接的 ticker: 'BTC', 'ETH', 'SOL' ...
+    - 已经是 Binance symbol: 'BTCUSDT', 'ETHUSDT' ...
+    """
+    cid = coin_id.lower()
+    # 已经是 Binance symbol
+    if cid.endswith('usdt'):
+        return cid.upper()
+    # 查映射表
+    if cid in _COIN_SYMBOL_MAP:
+        return _COIN_SYMBOL_MAP[cid]
+    # 纯 ticker (3-5 字母) → 加 USDT 后缀
+    if 2 <= len(cid) <= 6 and cid.isalpha():
+        return cid.upper() + 'USDT'
+    # 兜底：upper + USDT（可能 404，但至少不会 ETHEREUMUSDT）
+    return cid.upper() + 'USDT'
+
+
 def fetch(url, timeout=10):
     req = urllib.request.Request(_bust_cache(url), headers=UA)
     return json.load(urllib.request.urlopen(req, timeout=timeout))
@@ -62,7 +121,7 @@ def block_resolve(coin_id):
 
 # ─── 块1: 实时行情+30日历史 ───
 def block_price(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = _binance_symbol(coin_id)
     # 30日日线（Binance）
     d = safe_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=30', '30日价格')
     if d:
@@ -86,7 +145,7 @@ def block_price(coin_id):
 
 # ─── 块1.2+1.5: K线轨迹复盘 ───
 def block_klines(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = _binance_symbol(coin_id)
     # 30D 4H
     d = safe_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=4h&limit=180', '4H K线')
     if d:
@@ -145,7 +204,7 @@ def block_chain(coin_id):
 
 # ─── 块2.5: 合约市场 ───
 def block_contracts(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = _binance_symbol(coin_id)
     print(f'=== 🐋 {symbol} 永续合约 ===')
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -238,7 +297,7 @@ def block_contracts(coin_id):
 
 # ─── 块3: 交易所交叉验证 ───
 def block_exchanges(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = _binance_symbol(coin_id)
     print('=== 交易所交叉验证 ===')
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -298,7 +357,7 @@ def block_macro(coin_id):
     from concurrent.futures import ThreadPoolExecutor
     import urllib.parse
 
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = _binance_symbol(coin_id)
 
     def _yf_snapshot(ticker):
         """Yahoo Finance 快照 — 轻量调用，只拉 5 天日线取最新价"""

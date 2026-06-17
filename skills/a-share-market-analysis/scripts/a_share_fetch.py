@@ -272,15 +272,15 @@ def parse_args() -> argparse.Namespace:
 
 def run_remote(remote: str, sections: List[str] | None, stock: str | None) -> dict:
     cmd = ["ssh", "-o", "BatchMode=yes", remote]
+    # 统一用 env VAR=val ... python3 - 的格式，避免拼接 bug
+    env_pairs = []
     if sections:
-        cmd.extend(["env", f"A_SHARE_SECTIONS={','.join(sections)}"])
+        env_pairs.append(f"A_SHARE_SECTIONS={','.join(sections)}")
     if stock:
-        if sections:
-            cmd.extend([f"A_SHARE_STOCK={stock}"])
-        else:
-            cmd.extend(["env", f"A_SHARE_STOCK={stock}"])
-    elif sections:
-        pass
+        env_pairs.append(f"A_SHARE_STOCK={stock}")
+    if env_pairs:
+        cmd.append("env")
+        cmd.extend(env_pairs)
     cmd.extend(["python3", "-"])
     proc = subprocess.run(cmd, input=_load_remote_script(), text=True, capture_output=True)
     if proc.returncode != 0:

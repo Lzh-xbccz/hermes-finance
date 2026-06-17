@@ -31,19 +31,21 @@ def _bust_cache(url: str) -> str:
     sep = '&' if '?' in url else '?'
     return f'{url}{sep}_nocache={ts}'
 
-# ── 全局 Yahoo Finance 速率限制 ──
+# ── 全局 Yahoo Finance 速率限制（线程安全）──
 _YF_LAST_CALL = 0.0
 _YF_MIN_INTERVAL = 0.5
+_YF_LOCK = __import__("threading").Lock()
 
 
 def _yf_throttle():
     global _YF_LAST_CALL
     import time as _time
-    now = _time.monotonic()
-    wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
-    if wait > 0:
-        _time.sleep(wait)
-    _YF_LAST_CALL = _time.monotonic()
+    with _YF_LOCK:
+        now = _time.monotonic()
+        wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
+        if wait > 0:
+            _time.sleep(wait)
+        _YF_LAST_CALL = _time.monotonic()
 
 SYMBOL_MAP = {
     "CL": {"ticker": "CL=F", "label": "WTI Crude Oil", "kind": "energy", "news": "WTI oil"},

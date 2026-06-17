@@ -30,20 +30,22 @@ def _bust_cache(url: str) -> str:
     return f'{url}{sep}_nocache={ts}'
 
 
-# ── 全局 Yahoo Finance 速率限制（所有 fetch 调用共享）──
+# ── 全局 Yahoo Finance 速率限制（所有 fetch 调用共享，线程安全）──
 _YF_LAST_CALL = 0.0
 _YF_MIN_INTERVAL = 0.5  # 秒
+_YF_LOCK = __import__("threading").Lock()
 
 
 def _yf_throttle():
-    """确保 Yahoo Finance 请求间隔不低于 _YF_MIN_INTERVAL 秒。"""
+    """确保 Yahoo Finance 请求间隔不低于 _YF_MIN_INTERVAL 秒（线程安全）。"""
     global _YF_LAST_CALL
     import time as _time
-    now = _time.monotonic()
-    wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
-    if wait > 0:
-        _time.sleep(wait)
-    _YF_LAST_CALL = _time.monotonic()
+    with _YF_LOCK:
+        now = _time.monotonic()
+        wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
+        if wait > 0:
+            _time.sleep(wait)
+        _YF_LAST_CALL = _time.monotonic()
 
 SYMBOL_MAP = {
     "EURUSD": {"ticker": "EURUSD=X", "label": "EUR/USD", "query": "EURUSD"},
