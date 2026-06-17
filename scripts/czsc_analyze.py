@@ -204,7 +204,9 @@ class MultiFreqAnalysis:
             self.analyses[fk] = FreqAnalysis(symbol, fk)
     
     def resonance_check(self) -> str:
-        """检查多级别共振 — 笔方向 + 中枢位置 + 嵌套关系"""
+        """检查多级别共振 — 笔方向 + 中枢位置 + 嵌套关系（结果缓存）"""
+        if hasattr(self, '_resonance_cache'):
+            return self._resonance_cache
         lines = []
         
         # ── 1. 笔方向共振 ──
@@ -279,7 +281,9 @@ class MultiFreqAnalysis:
         
         lines.append(f"综合评分: {score:+d} → {verdict}")
         
-        return '\n'.join(lines)
+        result = '\n'.join(lines)
+        self._resonance_cache = result
+        return result
     
     def buy_signal_summary(self) -> str:
         """汇总所有级别的买入信号"""
@@ -365,8 +369,9 @@ class MultiFreqAnalysis:
             if bi_list:
                 lines.append("\n| 笔 | 方向 | 起点 | 终点 | 力度 |")
                 lines.append("|-----|------|------|------|------|")
-                for bi in bi_list:
-                    idx = fa.c.bi_list.index(bi) + 1
+                base_idx = len(fa.c.bi_list) - len(bi_list)
+                for j, bi in enumerate(bi_list):
+                    idx = base_idx + j + 1
                     lines.append(
                         f"| BI#{idx} | {bi.direction.value} | "
                         f"${bi.fx_a.fx:.4f} | ${bi.fx_b.fx:.4f} | "
@@ -426,7 +431,6 @@ def parse_args():
     symbol = 'BTCUSDT'
     freqs = DEFAULT_FREQS[:]
     do_chart = False
-    do_signals = False
     do_report = False
     
     i = 1
@@ -435,7 +439,7 @@ def parse_args():
         if arg == '--chart':
             do_chart = True
         elif arg == '--signals':
-            do_signals = True
+            pass  # 信号默认自动运行，此参数保留向后兼容
         elif arg == '--report':
             do_report = True
         elif arg == '--freqs' and i + 1 < len(sys.argv):
