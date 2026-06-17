@@ -152,7 +152,23 @@ Freq.D/W/M ✅ | Freq.F240/F60 ❌（市场时区问题）
 | 15min | F15 | `15m` | 入场确认 |
 
 ```bash
-# 多级别联立 + 信号 + dark 图表 + 报告
+# 多级别联立 + 信号 + dark 图表 + 报告（含背驰+模式识别）
 python3 scripts/czsc_analyze.py BTCUSDT --chart --report
 python3 scripts/czsc_analyze.py ETHUSDT --freqs 4h,1h,15m --chart
 ```
+
+---
+
+## 🆕 v4.1 新增：背驰分析 + 模式识别（源自 zengbin93/czsc_skills）
+
+`scripts/czsc_analyze.py` 自动输出以下额外分析：
+
+### 背驰分析
+- 同方向相邻笔 → 比较振幅 → 判断趋势衰竭
+- 下跌背驰：创新低但振幅 < 前笔 70% → 🟢 一买机会
+- 上涨背驰：创新高但振幅 < 前笔 70% → ⚠️ 一卖风险
+
+### 买卖点模式识别
+- 分型回调手动判断：一买/二买/一卖/二卖候补
+- 含具体价位和判断条件
+- 与信号函数互补（信号给 ✅/❌，模式给"为什么"）
