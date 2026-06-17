@@ -16,10 +16,24 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import StringIO
 import threading
 
-UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+UA = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+}
+
+
+def _bust_cache(url: str) -> str:
+    """给 URL 追加时间戳参数，绕过中间代理/CDN 缓存。"""
+    import random
+    ts = f'{int(time.time() * 1000)}_{random.randint(0, 9999)}'
+    sep = '&' if '?' in url else '?'
+    return f'{url}{sep}_nocache={ts}'
+
 
 def fetch(url, timeout=10):
-    req = urllib.request.Request(url, headers=UA)
+    req = urllib.request.Request(_bust_cache(url), headers=UA)
     return json.load(urllib.request.urlopen(req, timeout=timeout))
 
 def safe_fetch(url, label="", timeout=10):

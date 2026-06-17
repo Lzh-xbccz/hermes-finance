@@ -12,6 +12,20 @@ from typing import Any, Dict, List
 
 USER_AGENT = "Mozilla/5.0"
 
+_NO_CACHE_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
+def _bust_cache(url: str) -> str:
+    import random, time
+    ts = f'{int(time.time() * 1000)}_{random.randint(0, 9999)}'
+    sep = '&' if '?' in url else '?'
+    return f'{url}{sep}_nocache={ts}'
+
 COMMON_ETFS = {"SPY", "QQQ", "IWM", "DIA", "XLE", "XLK", "XLF", "GLD", "TLT", "USO"}
 COMMON_INDEX = {"^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX"}
 PROXIES = ["^VIX", "^TNX", "SPY", "QQQ", "IWM"]
@@ -25,9 +39,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def fetch_json(url: str, retries: int = 3) -> Dict[str, Any]:
+    url = _bust_cache(url)
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            req = urllib.request.Request(url, headers=_NO_CACHE_HEADERS)
             with urllib.request.urlopen(req, timeout=20) as resp:
                 return json.load(resp)
         except urllib.request.HTTPError as e:
@@ -38,9 +53,10 @@ def fetch_json(url: str, retries: int = 3) -> Dict[str, Any]:
 
 
 def fetch_text(url: str, retries: int = 3) -> str:
+    url = _bust_cache(url)
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            req = urllib.request.Request(url, headers=_NO_CACHE_HEADERS)
             with urllib.request.urlopen(req, timeout=20) as resp:
                 return resp.read().decode("utf-8", "ignore")
         except urllib.request.HTTPError as e:

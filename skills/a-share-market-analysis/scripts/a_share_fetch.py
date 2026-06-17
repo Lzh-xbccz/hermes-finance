@@ -49,11 +49,24 @@ import json
 import os
 
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 BJT = timezone(timedelta(hours=8))
 
 
+def _bust_cache(url: str) -> str:
+    import random
+    ts = f'{int(time.time() * 1000)}_{random.randint(0, 9999)}'
+    sep = '&' if '?' in url else '?'
+    return f'{url}{sep}_nocache={ts}'
+
+
 def fetch_text(url: str, encoding: str = "utf-8", headers: dict | None = None) -> str:
+    url = _bust_cache(url)
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, headers=headers or HEADERS)

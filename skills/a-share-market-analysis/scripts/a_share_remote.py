@@ -5,11 +5,24 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 BJT = timezone(timedelta(hours=8))
 
 
+def _bust_cache(url):
+    import random, time as _time
+    ts = f'{int(_time.time() * 1000)}_{random.randint(0, 9999)}'
+    sep = '&' if '?' in url else '?'
+    return f'{url}{sep}_nocache={ts}'
+
+
 def fetch_text(url, encoding="utf-8", headers=None):
+    url = _bust_cache(url)
     req = urllib.request.Request(url, headers=headers or HEADERS)
     with urllib.request.urlopen(req, timeout=20) as resp:
         return resp.read().decode(encoding, "ignore")
