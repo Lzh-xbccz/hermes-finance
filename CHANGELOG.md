@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.3 (2026-06-17) — 缠论深度分析增强
+
+### 🆕 新增（源自 czsc_skills by zengbin93）
+
+- **背驰分析** — `FreqAnalysis.divergence_check()` 比较同方向相邻笔振幅，检测上涨/下跌背驰
+- **买卖点模式识别** — `FreqAnalysis.buy_sell_pattern()` 基于分型回调手动判断一买/二买/一卖/二卖
+- 背驰+模式识别集成到报告输出（`generate_report`）和终端输出（`print_summary`）
+
+---
+
 ## v1.0.2 (2026-06-17) — 结构加固 + 补充
 
 ### 🟡 代码架构

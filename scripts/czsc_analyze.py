@@ -126,6 +126,61 @@ class FreqAnalysis:
             return self.c.bi_list[-1].power
         return 0.0
     
+    def divergence_check(self) -> str:
+        """背驰分析 — 比较同方向相邻笔的振幅（源自 czsc_skills by zengbin93）"""
+        if len(self.c.bi_list) < 3:
+            return ""
+        recent = self.c.bi_list[-3:]
+        bi1, bi2 = recent[-2], recent[-1]
+        amp1 = abs(bi1.fx_b.fx - bi1.fx_a.fx)
+        amp2 = abs(bi2.fx_b.fx - bi2.fx_a.fx)
+        
+        if bi1.direction != bi2.direction:
+            return ""
+        
+        d = bi1.direction.value
+        amp_ratio = amp2 / max(amp1, 0.01)
+        
+        if d == '向上' and bi2.fx_b.fx > bi1.fx_b.fx and amp2 < amp1 * 0.7:
+            return f"⚠️ 上涨背驰: 价格创新高${bi2.fx_b.fx:.1f}>{bi1.fx_b.fx:.1f} 但力度衰减 {amp_ratio:.1%} → 关注一卖"
+        elif d == '向下' and bi2.fx_b.fx < bi1.fx_b.fx and amp2 < amp1 * 0.7:
+            return f"🟢 下跌背驰: 价格创新低${bi2.fx_b.fx:.1f}<{bi1.fx_b.fx:.1f} 但力度衰减 {amp_ratio:.1%} → 关注一买"
+        return ""
+    
+    def buy_sell_pattern(self) -> str:
+        """买卖点模式识别 — 基于分型回调判断（源自 czsc_skills by zengbin93）"""
+        if len(self.c.bi_list) < 4:
+            return ""
+        recent = self.c.bi_list[-5:]
+        last = recent[-1]
+        parts = []
+        
+        # 识别买点：回调不破前低=二买，创新低反弹=一买
+        for i in range(1, len(recent)):
+            bi = recent[i]
+            if bi.direction.value == '向上' and recent[i-1].direction.value == '向下':
+                if i >= 2:
+                    prev_up = recent[i-2]
+                    if prev_up.direction.value == '向上':
+                        if bi.fx_a.fx > prev_up.fx_a.fx:
+                            parts.append(f"二买候补: 回调${bi.fx_a.fx:.1f}不破前低${prev_up.fx_a.fx:.1f}")
+                        elif bi.fx_a.fx < prev_up.fx_a.fx:
+                            parts.append(f"一买候补: 创新低${bi.fx_a.fx:.1f}后转向上")
+        
+        # 识别卖点
+        for i in range(1, len(recent)):
+            bi = recent[i]
+            if bi.direction.value == '向下' and recent[i-1].direction.value == '向上':
+                if i >= 2:
+                    prev_down = recent[i-2]
+                    if prev_down.direction.value == '向下':
+                        if bi.fx_a.fx < prev_down.fx_a.fx:
+                            parts.append(f"二卖候补: 反弹${bi.fx_a.fx:.1f}不过前高${prev_down.fx_a.fx}")
+                        elif bi.fx_a.fx > prev_down.fx_a.fx:
+                            parts.append(f"一卖候补: 创新高${bi.fx_a.fx:.1f}后转向下")
+        
+        return ' | '.join(parts[-3:]) if parts else ""
+    
     def summary(self) -> str:
         """单行摘要"""
         bi = self.c.bi_list[-1] if self.c.bi_list else None
@@ -297,6 +352,14 @@ class MultiFreqAnalysis:
                     sig_strs = [str(s) for s in sigs]
                     lines.append(f"  - 【{name}】✅ {' | '.join(sig_strs)}")
             
+            # 背驰 + 买卖点模式
+            div = fa.divergence_check()
+            bsp = fa.buy_sell_pattern()
+            if div:
+                lines.append(f"- **背驰**: {div}")
+            if bsp:
+                lines.append(f"- **买卖点模式**: {bsp}")
+            
             # 笔序列（最近5笔）
             bi_list = fa.c.bi_list[-5:]
             if bi_list:
@@ -344,6 +407,13 @@ class MultiFreqAnalysis:
             if fa.signals:
                 for name, sigs in fa.signals.items():
                     print(f"  【{name}】✅")
+            
+            div = fa.divergence_check()
+            if div:
+                print(f"  背驰: {div}")
+            bsp = fa.buy_sell_pattern()
+            if bsp:
+                print(f"  模式: {bsp}")
         
         print(f"\n{'='*60}")
 
