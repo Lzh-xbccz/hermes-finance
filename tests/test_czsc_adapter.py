@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from hermes_finance.czsc_adapter import extract_market_rows
+from hermes_finance.czsc_adapter import _normalize_freqs, _resonance, extract_market_rows
 
 
 def row(i: int) -> dict[str, float | int | str]:
@@ -33,6 +33,31 @@ class CzscAdapterTests(unittest.TestCase):
         self.assertEqual(len(rows["1h"]), 1)
         self.assertEqual(len(rows["4h"]), 1)
         self.assertEqual(len(rows["1d"]), 1)
+
+    def test_futures_default_freqs_are_short_term(self) -> None:
+        self.assertEqual(_normalize_freqs(None, market="futures"), ["4h", "15m"])
+
+    def test_a_share_default_freqs_stay_daily(self) -> None:
+        self.assertEqual(_normalize_freqs(None, market="a_share"), ["1d"])
+
+    def test_live_broken_up_bi_penalizes_short_term_resonance(self) -> None:
+        analyses = {
+            "4h": {
+                "last_bi": {"direction": "向上", "live_direction": "向下", "broken_by_current_price": True},
+                "center": None,
+                "active_signals": [],
+            },
+            "15m": {
+                "last_bi": {"direction": "向上", "live_direction": "向下", "broken_by_current_price": True},
+                "center": {"position": "下方"},
+                "active_signals": [],
+            },
+        }
+
+        resonance = _resonance(analyses)
+
+        self.assertLessEqual(resonance["score"], -2)
+        self.assertIn("空", resonance["verdict"])
 
 
 if __name__ == "__main__":

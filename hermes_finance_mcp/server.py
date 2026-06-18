@@ -58,6 +58,7 @@ def analyze_market_tool(
     symbol: str | None = None,
     blocks: str = "all",
     with_czsc: bool = True,
+    czsc_freqs: str | None = None,
     stock: str | None = None,
     remote: str | None = None,
     timeout: int = 240,
@@ -69,6 +70,7 @@ def analyze_market_tool(
         symbol,
         blocks=blocks,
         with_czsc=with_czsc,
+        czsc_freqs=czsc_freqs,
         stock=stock,
         remote=remote,
         timeout=timeout,
@@ -83,10 +85,10 @@ def analyze_crypto(symbol: str, blocks: str = "all", with_czsc: bool = True, tim
 
 
 @mcp.tool()
-def analyze_futures(symbol: str, timeout: int = 180) -> dict[str, Any]:
+def analyze_futures(symbol: str, czsc_freqs: str | None = None, timeout: int = 180) -> dict[str, Any]:
     """Fetch futures or commodity market data and run collector-Kline CZSC when available."""
 
-    return analyze_market("futures", symbol, with_czsc=True, timeout=timeout)
+    return analyze_market("futures", symbol, with_czsc=True, czsc_freqs=czsc_freqs, timeout=timeout)
 
 
 @mcp.tool()

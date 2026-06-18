@@ -178,6 +178,7 @@ def analyze_market(
     *,
     blocks: str = "all",
     with_czsc: bool = True,
+    czsc_freqs: str | list[str] | None = None,
     stock: str | None = None,
     remote: str | None = None,
     timeout: int = 240,
@@ -202,6 +203,7 @@ def analyze_market(
             fetch["data"],
             market=str(resolved_market),
             symbol=str(fetch.get("symbol") or stock or symbol or ""),
+            freqs=czsc_freqs,
         )
 
     result = {

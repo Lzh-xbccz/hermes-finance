@@ -6,8 +6,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-FREQ_ORDER = {"1h": 1, "4h": 2, "1d": 3}
+FREQ_ORDER = {"1d": 1, "4h": 2, "1h": 3, "15m": 4}
 DEFAULT_MARKET_FREQS = ["4h", "1d"]
+DEFAULT_FREQS_BY_MARKET = {
+    "futures": ["4h", "15m"],
+    "a_share": ["1d"],
+}
 MIN_BARS = 20
 
 SIGNAL_DEFS = {
@@ -26,7 +30,7 @@ def analyze_market_klines(
     *,
     market: str,
     symbol: str | None = None,
-    freqs: str | list[str] = DEFAULT_MARKET_FREQS,
+    freqs: str | list[str] | None = None,
 ) -> dict[str, Any]:
     """Run CZSC on K-lines already returned by a market collector.
 
@@ -35,7 +39,7 @@ def analyze_market_klines(
     provide the instrument directly.
     """
 
-    freq_list = _normalize_freqs(freqs)
+    freq_list = _normalize_freqs(freqs, market=market)
     rows_by_freq, source = extract_market_rows(data, market=market)
     selected = {freq: rows_by_freq[freq] for freq in freq_list if rows_by_freq.get(freq)}
     if not selected:
@@ -48,7 +52,7 @@ def analyze_market_klines(
     except Exception as exc:  # pragma: no cover - depends on optional runtime
         return _unavailable(market, symbol, f"czsc import failed: {exc}", source)
 
-    freq_map = {"1h": Freq.F60, "4h": Freq.F240, "1d": Freq.D}
+    freq_map = {"15m": Freq.F15, "1h": Freq.F60, "4h": Freq.F240, "1d": Freq.D}
     analyses: dict[str, dict[str, Any]] = {}
     errors: dict[str, str] = {}
     target_symbol = symbol or str(data.get("symbol") or data.get("ticker") or market).upper()
@@ -95,6 +99,7 @@ def extract_market_rows(data: dict[str, Any], *, market: str) -> tuple[dict[str,
         if block.get("available") and isinstance(block.get("klines"), dict):
             klines = block["klines"]
             return {
+                "15m": _clean_rows(klines.get("15m", [])),
                 "1h": _clean_rows(klines.get("1h", [])),
                 "4h": _clean_rows(klines.get("4h", [])),
                 "1d": _clean_rows(klines.get("1d", [])),
@@ -124,6 +129,7 @@ def extract_market_rows(data: dict[str, Any], *, market: str) -> tuple[dict[str,
 
 def _standard_rows(data: dict[str, Any]) -> tuple[dict[str, list[dict[str, Any]]], str]:
     return {
+        "15m": _clean_rows(data.get("m15", []) or data.get("minute_15d", []) or data.get("intraday_15m", [])),
         "1h": _clean_rows(data.get("hourly_10d", [])),
         "4h": _clean_rows(data.get("agg_4h_10d", [])),
         "1d": _clean_rows(data.get("daily_90d", [])),
@@ -140,14 +146,17 @@ def _clean_rows(rows: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _normalize_freqs(freqs: str | list[str]) -> list[str]:
+def _normalize_freqs(freqs: str | list[str] | None, *, market: str | None = None) -> list[str]:
+    default = DEFAULT_FREQS_BY_MARKET.get(str(market or ""), DEFAULT_MARKET_FREQS)
+    if freqs is None:
+        return default[:]
     raw = freqs.split(",") if isinstance(freqs, str) else freqs
     selected = []
     for item in raw:
         freq = str(item).strip().lower()
         if freq in FREQ_ORDER and freq not in selected:
             selected.append(freq)
-    return selected or DEFAULT_MARKET_FREQS[:]
+    return selected or default[:]
 
 
 def _rows_to_raw_bars(rows: list[dict[str, Any]], *, symbol: str, freq: Any, RawBar: Any) -> list[Any]:
@@ -224,12 +233,25 @@ def _summarize_czsc(c: Any, bars: list[Any], *, freq: str, call_signal: Any) -> 
     if last_bi:
         start = float(last_bi.fx_a.fx)
         end = float(last_bi.fx_b.fx)
+        current = float(bars[-1].close)
         pct = (end - start) / start * 100 if start else 0.0
+        completion_direction = last_bi.direction.value
+        live_direction = completion_direction
+        broken = False
+        if completion_direction == "向上" and current < start:
+            live_direction = "向下"
+            broken = True
+        elif completion_direction == "向下" and current > start:
+            live_direction = "向上"
+            broken = True
         last_bi_detail = {
-            "direction": last_bi.direction.value,
+            "direction": completion_direction,
+            "live_direction": live_direction,
             "start": start,
             "end": end,
             "change_pct": pct,
+            "current_price": current,
+            "broken_by_current_price": broken,
         }
 
     return {
@@ -314,7 +336,7 @@ def _buy_sell_pattern(c: Any) -> str:
 
 def _resonance(analyses: dict[str, dict[str, Any]]) -> dict[str, Any]:
     score = 0
-    dirs = {freq: item.get("last_bi", {}).get("direction") for freq, item in analyses.items() if item.get("last_bi")}
+    dirs = {freq: item.get("last_bi", {}).get("live_direction") or item.get("last_bi", {}).get("direction") for freq, item in analyses.items() if item.get("last_bi")}
     unique_dirs = {d for d in dirs.values() if d}
     if len(unique_dirs) == 1:
         only = next(iter(unique_dirs))
@@ -326,6 +348,12 @@ def _resonance(analyses: dict[str, dict[str, Any]]) -> dict[str, Any]:
             if center.get("position") == "上方":
                 score += 1
             elif center.get("position") == "下方":
+                score -= 1
+        last_bi = item.get("last_bi", {})
+        if last_bi.get("broken_by_current_price"):
+            if last_bi.get("live_direction") == "向上":
+                score += 1
+            elif last_bi.get("live_direction") == "向下":
                 score -= 1
         for sig in item.get("active_signals", []):
             if sig["direction"] == "buy":
@@ -350,10 +378,13 @@ def _summary_line(symbol: str, analyses: dict[str, dict[str, Any]], resonance: d
     parts = []
     for freq, item in sorted(analyses.items(), key=lambda kv: FREQ_ORDER.get(kv[0], 99)):
         bi = item.get("last_bi", {})
+        direction = bi.get("live_direction") or bi.get("direction", "无笔")
+        if bi.get("broken_by_current_price"):
+            direction = f"{direction}(完成笔{bi.get('direction')}已被当前价破坏)"
         center = item.get("center") or {}
         parts.append(
             f"{freq}: {item['n_klines']}K/{item['n_bi']}笔/"
-            f"{bi.get('direction', '无笔')}/中枢{center.get('position', '无')}"
+            f"{direction}/中枢{center.get('position', '无')}"
         )
     return f"{symbol} CZSC {resonance['verdict']} score={resonance['score']} | " + " | ".join(parts)
 
@@ -376,12 +407,16 @@ def _report_text(
     ]
     for freq, item in sorted(analyses.items(), key=lambda kv: FREQ_ORDER.get(kv[0], 99)):
         bi = item.get("last_bi", {})
+        live_direction = bi.get("live_direction") or bi.get("direction", "无")
+        if bi.get("broken_by_current_price"):
+            live_direction = f"{live_direction}（完成笔{bi.get('direction')}已被当前价破坏）"
         center = item.get("center")
         lines.extend([
             f"## {freq}",
             f"- K线/分型/笔: {item['n_klines']} / {item['n_fx']} / {item['n_bi']}",
             f"- 当前价: {item['current_price']:.4f}",
-            f"- 最近笔: {bi.get('direction', '无')} {bi.get('start', 'n/a')} -> {bi.get('end', 'n/a')} ({bi.get('change_pct', 0):+.2f}%)",
+            f"- 最近完成笔: {bi.get('direction', '无')} {bi.get('start', 'n/a')} -> {bi.get('end', 'n/a')} ({bi.get('change_pct', 0):+.2f}%)",
+            f"- 实时方向: {live_direction}",
             f"- 中枢: {_center_text(center)}",
             f"- 有效信号: {_signals_text(item.get('active_signals', []))}",
             f"- 背驰: {item.get('divergence') or '无'}",

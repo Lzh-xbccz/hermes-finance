@@ -55,8 +55,9 @@ def fetch_bars(symbol: str, freq_key: str) -> tuple:
     """拉取 K 线并转换为 czsc RawBar"""
     period = PERIOD_MAP[freq_key]
     freq = FREQ_MAP[freq_key]
-    edt = datetime.now().strftime('%Y%m%d')
-    sdt = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime('%Y%m%d')
+    edt_dt = datetime.now() + timedelta(days=1)
+    edt = edt_dt.strftime('%Y%m%d')
+    sdt = (edt_dt - timedelta(days=LOOKBACK_DAYS)).strftime('%Y%m%d')
     
     df = get_raw_bars(symbol, period, sdt=sdt, edt=edt)
     bars = format_standard_kline(df, freq)
@@ -125,6 +126,29 @@ class FreqAnalysis:
         if self.c.bi_list:
             return self.c.bi_list[-1].direction.value
         return 'N/A'
+
+    @property
+    def live_bi_dir(self) -> str:
+        if not self.c.bi_list:
+            return 'N/A'
+        bi = self.c.bi_list[-1]
+        direction = bi.direction.value
+        start = float(bi.fx_a.fx)
+        if direction == '向上' and self.cur_price < start:
+            return '向下'
+        if direction == '向下' and self.cur_price > start:
+            return '向上'
+        return direction
+
+    @property
+    def is_last_bi_broken(self) -> bool:
+        return self.live_bi_dir != self.last_bi_dir
+
+    @property
+    def live_bi_label(self) -> str:
+        if self.is_last_bi_broken:
+            return f"{self.live_bi_dir}（完成笔{self.last_bi_dir}已被当前价破坏）"
+        return self.live_bi_dir
     
     @property
     def last_bi_power(self) -> float:
@@ -215,7 +239,7 @@ class FreqAnalysis:
         bi = self.c.bi_list[-1] if self.c.bi_list else None
         if bi:
             delta, pct = self.bi_change(bi)
-            bi_str = f"BI#{self.n_bi} {self.last_bi_dir} ${delta:+.1f} ({pct:+.2f}%)"
+            bi_str = f"BI#{self.n_bi} 完成笔{self.last_bi_dir}/实时{self.live_bi_label} ${delta:+.1f} ({pct:+.2f}%)"
         else:
             bi_str = "无笔"
         zs_str = f"ZS ${self.zs_low:.4f}-${self.zs_high:.4f} {self.zs_position}" if self.zs_fxs else "无中枢"
@@ -241,13 +265,17 @@ class MultiFreqAnalysis:
         lines = []
         
         # ── 1. 笔方向共振 ──
-        dirs = {fk: fa.last_bi_dir for fk, fa in self.analyses.items()}
+        dirs = {fk: fa.live_bi_dir for fk, fa in self.analyses.items()}
         unique_dirs = set(dirs.values())
         if len(unique_dirs) == 1:
             d = list(unique_dirs)[0]
             lines.append(f"笔方向: {'🟢 一致上涨' if d == '向上' else '🔴 一致下跌'}（同向共振 ✓）")
         else:
             lines.append(f"笔方向: ⚠️ 分歧 — {' | '.join(f'{fk}={d}' for fk, d in dirs.items())}")
+
+        broken = [f"{fk}: 完成笔{fa.last_bi_dir}->实时{fa.live_bi_dir}" for fk, fa in self.analyses.items() if fa.is_last_bi_broken]
+        if broken:
+            lines.append(f"实时破坏: {' | '.join(broken)}")
         
         # ── 2. 中枢位置共振 ──
         zs_positions = {}
@@ -292,6 +320,9 @@ class MultiFreqAnalysis:
             n_above = sum(1 for p in zs_positions.values() if '上方' in p)
             n_below = sum(1 for p in zs_positions.values() if '下方' in p)
             score += n_above - n_below
+        for fa in self.analyses.values():
+            if fa.is_last_bi_broken:
+                score += 1 if fa.live_bi_dir == '向上' else -1
         # 嵌套
         if len(sorted_keys) >= 2 and big.zs_fxs and small.zs_fxs:
             if small_zs.low > big_zs.high:
@@ -405,6 +436,7 @@ class MultiFreqAnalysis:
             fa = self.analyses[fk]
             lines.append(f"## {fk} 级别")
             lines.append(f"- K 线: {fa.n_klines} | 分型: {fa.n_fx} | 笔: {fa.n_bi} | UBI: {fa.n_ubi}")
+            lines.append(f"- **方向**: 最近完成笔 {fa.last_bi_dir} | 实时方向 {fa.live_bi_label}")
             
             if fa.zs_fxs:
                 lines.append(f"- **中枢**: ${fa.zs_low:.4f} — ${fa.zs_high:.4f} | 力度: {fa.zs_power} | 位置: {fa.zs_position}")

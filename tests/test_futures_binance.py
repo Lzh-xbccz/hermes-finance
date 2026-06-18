@@ -74,7 +74,7 @@ class BinanceTradFiTests(unittest.TestCase):
         self.assertEqual(data["symbol"], "CLUSDT")
         self.assertEqual(data["summary"]["last_price"], 74.26)
         self.assertGreater(data["summary"]["open_interest_60m_change_pct"], 0)
-        self.assertEqual(data["summary"]["klines"], {"1h": 1, "4h": 1, "1d": 1})
+        self.assertEqual(data["summary"]["klines"], {"15m": 1, "1h": 1, "4h": 1, "1d": 1})
 
     def test_report_prefers_binance_tradfi_kline_layer(self) -> None:
         rows = [kline(1710000000000 + i * 3600000, "100", "102", "99", str(100 + i * 0.1)) for i in range(260)]
@@ -106,7 +106,7 @@ class BinanceTradFiTests(unittest.TestCase):
                         "latest_top_account_long_short_ratio": 4.0,
                         "latest_top_position_long_short_ratio": 3.0,
                     },
-                    "klines": {"1h": normalized, "4h": normalized[-180:], "1d": normalized[-120:]},
+                    "klines": {"15m": normalized[-200:], "1h": normalized, "4h": normalized[-180:], "1d": normalized[-120:]},
                 }
             },
             "source_status": {"binance_tradfi_perp": "ok"},

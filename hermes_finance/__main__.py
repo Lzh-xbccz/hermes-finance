@@ -33,6 +33,7 @@ def main() -> int:
     p_analyze.add_argument("--remote")
     p_analyze.add_argument("--timeout", type=int, default=240)
     p_analyze.add_argument("--no-czsc", action="store_true")
+    p_analyze.add_argument("--czsc-freqs", help="Collector-Kline CZSC frequencies, e.g. 4h,15m")
     p_analyze.add_argument("--json", action="store_true")
 
     p_czsc = sub.add_parser("czsc", help="Run CZSC multi-frequency analysis")
@@ -64,6 +65,7 @@ def main() -> int:
             args.symbol,
             blocks=args.blocks,
             with_czsc=not args.no_czsc,
+            czsc_freqs=args.czsc_freqs,
             stock=args.stock,
             remote=args.remote,
             timeout=args.timeout,

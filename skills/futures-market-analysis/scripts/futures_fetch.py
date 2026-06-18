@@ -304,6 +304,7 @@ def fetch_binance_tradfi_perp(symbol: str) -> Dict[str, Any]:
     oi_hist = fetch_binance_json("/futures/data/openInterestHist", {"symbol": binance_symbol, "period": "5m", "limit": 12})
     account_ratio = fetch_binance_json("/futures/data/topLongShortAccountRatio", {"symbol": binance_symbol, "period": "5m", "limit": 5})
     position_ratio = fetch_binance_json("/futures/data/topLongShortPositionRatio", {"symbol": binance_symbol, "period": "5m", "limit": 5})
+    klines_15m = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "15m", "limit": 500}))
     klines_1h = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "1h", "limit": 240}))
     klines_4h = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "4h", "limit": 180}))
     klines_1d = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "1d", "limit": 120}))
@@ -341,6 +342,7 @@ def fetch_binance_tradfi_perp(symbol: str) -> Dict[str, Any]:
             "latest_top_account_long_short_ratio": latest_account_ratio,
             "latest_top_position_long_short_ratio": latest_position_ratio,
             "klines": {
+                "15m": len(klines_15m),
                 "1h": len(klines_1h),
                 "4h": len(klines_4h),
                 "1d": len(klines_1d),
@@ -354,6 +356,7 @@ def fetch_binance_tradfi_perp(symbol: str) -> Dict[str, Any]:
         "top_long_short_account_ratio_5m": account_rows,
         "top_long_short_position_ratio_5m": position_rows,
         "klines": {
+            "15m": klines_15m,
             "1h": klines_1h,
             "4h": klines_4h,
             "1d": klines_1d,
