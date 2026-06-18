@@ -1,15 +1,67 @@
-# Hermes Finance — 缠论+多维度金融市场分析框架
+# Hermes Finance — 面向 AI Agent 的八维金融分析框架
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v1.1.1-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
-> 基于 [czsc](https://github.com/waditu/czsc) v1.0 缠论库，覆盖 **加密货币 / 商品期货 / 外汇 / A股 / 美股** 五大市场。每个市场采用多维因果分析框架，集成缠论作为核心技术分析维度。
+Hermes Finance 是一个给 **Claude Code、Codex、Cursor、Gemini、Cline、Roo、Continue、VS Code Copilot 等 AI 编程/研究工具** 使用的金融市场分析框架。它把行情采集、市场路由、八维分析、CZSC 缠论确认和 MCP/Skills 接入放在同一个仓库里，目标是让 AI 不再只给“涨跌摘要”，而是按统一证据链输出可复核的市场判断。
+
+覆盖市场：
+
+- **加密货币**：BTC、ETH、SOL 等现货/合约/链上/宏观联动。
+- **商品与股指期货**：CL、BZ、GC、SI、HG、NG、ES、NQ 等；商品线支持 Binance TradFi 永续如 `CLUSDT`、`XAUUSDT`。
+- **外汇**：DXY、EURUSD、USDJPY、GBPUSD、AUDUSD 等。
+- **A 股**：指数、个股、市场广度、北向/板块资金、Sequoia-X 量化扫描。
+- **美股/ETF/指数**：AAPL、TSLA、SPY、QQQ 等技术、行业、宏观和事件代理。
 
 ---
 
-## 🚀 v1.1.1：双版本金融分析 + AI 客户端适配
+## 项目解决什么问题
+
+很多 AI 工具做金融分析时容易出现三个问题：只看单一价格、漏掉数据源状态、技术图形和基本面判断互相混在一起。Hermes Finance 用固定流程约束输出：
+
+1. 先识别市场和标的，避免把 `CL`、`CLUSDT`、`BTC`、`AAPL` 路由错。
+2. 拉取对应市场的数据源，明确哪些成功、哪些降级、哪些不可用。
+3. 用前七维形成主判断，再用第八维 CZSC 缠论做确认、冲突或不足标注。
+4. 输出 `七维主判断`、`缠论确认`、`最终方向`，并给出情景、失效条件和风险点。
+
+这套规则同时写进了 CLI、Skills、MCP server instructions、MCP prompts 和各类 AI 客户端配置，方便不同工具得到一致结果。
+
+---
+
+## 核心特性
+
+| 能力 | 说明 |
+|---|---|
+| 严格八维分析 | 每个市场都尽量输出 1-7 维主判断 + 第 8 维 CZSC 缠论确认 |
+| 双版本接入 | Skills 给 Codex/Agent 读取，MCP 给 Claude Desktop、Cursor 等 MCP 客户端调用 |
+| 共享核心库 | `hermes_finance/` 统一路由、采集、分析、CZSC 适配和 Markdown/JSON 输出 |
+| 多市场覆盖 | 加密货币、商品/股指期货、外汇、A股、美股/ETF/指数 |
+| AI 客户端适配 | Claude Code、Codex、Cursor、Copilot、Gemini、Windsurf、Cline、Roo、Continue、Zed、Amp |
+| 缠论集成 | 基于 [czsc](https://github.com/waditu/czsc) v1.0，多级别 K 线、笔、中枢、买卖点候补和结构评分 |
+| 数据源降级 | Binance、CoinGecko、Yahoo、CFTC、EIA、baostock、akshare、腾讯等数据源失败时保留状态 |
+| 可验证工程 | 单元测试、compileall、Skill 校验和 MCP smoke test 覆盖核心路径 |
+
+---
+
+## 八维输出契约
+
+Hermes Finance 的正式市场分析不是“行情快照”，而是固定输出契约：
+
+| 顺序 | 模块 | 目的 |
+|---|---|---|
+| 0 | 数据完整性 | 列出行情、合约、宏观、链上、资金、CZSC 等数据是否可用 |
+| 1-7 | 七维主判断 | 按市场特征建立方向判断，不让单一指标决定结论 |
+| 8 | CZSC 缠论结构 | 用缠论确认、冲突或标注不足；不覆盖前七维判断 |
+| 结论 | 最终方向 | 给出偏多、偏空、震荡、观望等方向与置信度 |
+| 风控 | 情景与失效 | 给出关键价位、触发条件、反证条件和风险提示 |
+
+不同市场的前七维会按资产特征调整，例如加密货币包含链上/合约/流动性，期货包含传统库存/CFTC/跨品种验证，外汇包含利率差和央行路径，A 股包含北向/广度/板块轮动，美股包含公司事件和行业结构。第八维统一使用 CZSC 缠论确认。
+
+---
+
+## 双版本金融分析 + AI 客户端适配
 
 Hermes Finance 现在同时支持 **Skills** 和 **MCP** 两种使用方式：
 
@@ -20,6 +72,43 @@ Hermes Finance 现在同时支持 **Skills** 和 **MCP** 两种使用方式：
 - **共享核心库**：`hermes_finance/` 统一路由、采集器调用、缠论确认和 Markdown/JSON 输出，避免维护两套行情逻辑。
 
 完整安装、使用、MCP 接入、AI 客户端适配、功能和排错见 [docs/USAGE.md](docs/USAGE.md) 与 [docs/AI_CLIENTS.md](docs/AI_CLIENTS.md)。
+
+---
+
+## 快速体验
+
+```bash
+# 安装基础依赖
+bash install.sh
+
+# 如需 MCP 客户端接入，同时安装 MCP 依赖
+INSTALL_MCP=1 bash install.sh
+
+# 路由标的
+python3 -m hermes_finance route BTC
+python3 -m hermes_finance route CLUSDT
+
+# 八维分析
+python3 -m hermes_finance analyze crypto BTC --blocks all
+python3 -m hermes_finance analyze futures CL
+python3 -m hermes_finance analyze forex EURUSD
+python3 -m hermes_finance analyze us-equity SPY
+python3 -m hermes_finance analyze a-share --stock 600519
+
+# MCP server
+python3 bin/hermes_finance_mcp.py
+```
+
+`czsc` 需要从 GitHub 源码安装；`install.sh` 已包含对应流程。更完整的安装、客户端配置和排错见 [docs/USAGE.md](docs/USAGE.md)。
+
+---
+
+## 适合谁使用
+
+- 想让 Claude Code、Codex、Cursor、Cline、Roo 等工具直接调用金融分析能力的 AI 用户。
+- 想把 Skills 和 MCP 两套形态同时维护在一个仓库里的 Agent 开发者。
+- 想做多市场联动分析、但又希望输出格式稳定可复核的研究者。
+- 想把 CZSC 缠论作为确认层，而不是单独依赖技术图形下结论的交易系统开发者。
 
 ---
 
