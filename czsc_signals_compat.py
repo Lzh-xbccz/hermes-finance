@@ -8,11 +8,28 @@ v1.0.0rc8 将信号函数编译为 Rust 原生代码，通过 czsc._native.call_
 用法:
     from czsc.signals import cxt_first_buy_V221126, cxt_second_bs_V230320
     result = cxt_first_buy_V221126(c)  # c = CZSC 对象
+
+安装方式：install.sh 会将此文件复制到 czsc 包目录下。
+升级 czsc 后需重新运行 install.sh 或手动重新复制。
 """
+
+import warnings
 
 from czsc._native import call_signal as _call_signal
 from typing import Any, Dict, List, Optional
 from czsc import CZSC
+
+try:
+    import czsc
+    _czsc_version = getattr(czsc, '__version__', 'unknown')
+    if not _czsc_version.startswith('1.0.0'):
+        warnings.warn(
+            f"czsc_signals_compat.py 是为 czsc 1.0.0rc8 编写的，当前 czsc 版本为 {_czsc_version}，可能存在兼容性问题。",
+            UserWarning,
+            stacklevel=2,
+        )
+except Exception:
+    pass
 
 # ─── 工厂函数：为每个信号名生成调用函数 ───
 

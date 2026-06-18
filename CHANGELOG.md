@@ -2,7 +2,29 @@
 
 ## Unreleased
 
-### 改进
+## v1.1.2 (2026-06-18) — CI 与脚本稳定性修复
+
+### 新增
+
+- 新增 GitHub Actions CI，在 push / pull_request 时自动执行 compileall 和 unittest。
+- 新增回归测试，覆盖 `czsc_analyze.py --signals`、A 股远程命令构造和板块资金解析。
+
+### 修复
+
+- 修复默认 `python -m unittest discover -v` 找不到测试的问题。
+- 修复 `scripts/czsc_analyze.py --signals` 参数被解析但未传入输出流程的问题。
+- 修复 `skills/czsc-ccxt-analysis/scripts/czsc_4h_15m.py` 固定日期窗口导致脚本随时间过期的问题。
+- 修复 A 股远程采集命令在 sections 和 stock 同时存在时的 env 参数拼接不一致。
+- 修复 A 股板块资金解析只接受包含“亿”的字段，导致部分流量值被丢弃的问题。
+
+### 稳定性改进
+
+- `scripts/czsc_analyze.py` 缓存共振结果，报告笔编号改为基于切片位置计算。
+- futures / forex Yahoo Finance 限流器加锁，降低并发请求触发 429 的概率。
+- crypto 采集脚本扩展常见 CoinGecko id 到交易所 ticker 的映射。
+- `czsc_signals_compat.py` 增加 czsc 版本提示和安装说明。
+
+### 分析框架改进
 
 - 全市场分析契约升级为“尽可能八维”：futures/forex/us_equity/a_share 也要求 `七维主判断`、`缠论确认`、`最终方向`，CZSC 不可用时必须标注第 8 维不足并降级。
 - 新增 collector K-line CZSC 适配层，非 crypto 市场可直接用采集器返回的 Binance/Yahoo/Tencent K 线构造 CZSC，避免只支持 ccxt 交易对。

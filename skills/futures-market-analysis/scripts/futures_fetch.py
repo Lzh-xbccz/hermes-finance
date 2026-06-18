@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -36,16 +37,18 @@ def _bust_cache(url: str) -> str:
 # ── 全局 Yahoo Finance 速率限制 ──
 _YF_LAST_CALL = 0.0
 _YF_MIN_INTERVAL = 0.5
+_YF_LOCK = threading.Lock()
 
 
 def _yf_throttle():
     global _YF_LAST_CALL
     import time as _time
-    now = _time.monotonic()
-    wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
-    if wait > 0:
-        _time.sleep(wait)
-    _YF_LAST_CALL = _time.monotonic()
+    with _YF_LOCK:
+        now = _time.monotonic()
+        wait = _YF_LAST_CALL + _YF_MIN_INTERVAL - now
+        if wait > 0:
+            _time.sleep(wait)
+        _YF_LAST_CALL = _time.monotonic()
 
 BINANCE_TRADFI_SYMBOLS = {
     "CL": "CLUSDT",

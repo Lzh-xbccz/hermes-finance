@@ -80,7 +80,7 @@ def parse_sectors(raw_table_data: list) -> dict:
         if not name or name.isdigit():
             continue
         change = parse_number(change_str)
-        flow = parse_number(flow_str) if flow_str and "亿" in flow_str else 0
+        flow = parse_number(flow_str) if flow_str else 0
         sectors.append({"name": name, "change_pct": change, "net_flow_yi": flow})
     sectors.sort(key=lambda x: x["change_pct"], reverse=True)
     return {"top_gainers": sectors[:10], "top_losers": sectors[-10:][::-1] if len(sectors) >= 10 else []}

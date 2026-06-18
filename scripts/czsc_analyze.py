@@ -262,6 +262,8 @@ class MultiFreqAnalysis:
     
     def resonance_check(self) -> str:
         """检查多级别共振 — 笔方向 + 中枢位置 + 嵌套关系"""
+        if hasattr(self, '_resonance_cache'):
+            return self._resonance_cache
         lines = []
         
         # ── 1. 笔方向共振 ──
@@ -357,8 +359,10 @@ class MultiFreqAnalysis:
             verdict = '⚪ 震荡观望（信号不足，等方向确认）'
         
         lines.append(f"综合评分: {score:+d} → {verdict}")
-        
-        return '\n'.join(lines)
+
+        result = '\n'.join(lines)
+        self._resonance_cache = result
+        return result
     
     def active_signal_summary(self) -> str:
         """汇总所有级别的有效买卖信号"""
@@ -465,8 +469,9 @@ class MultiFreqAnalysis:
             if bi_list:
                 lines.append("\n| 笔 | 方向 | 起点 | 终点 | 力度 |")
                 lines.append("|-----|------|------|------|------|")
-                for bi in bi_list:
-                    idx = fa.c.bi_list.index(bi) + 1
+                base_idx = len(fa.c.bi_list) - len(bi_list)
+                for j, bi in enumerate(bi_list):
+                    idx = base_idx + j + 1
                     delta, pct = fa.bi_change(bi)
                     lines.append(
                         f"| BI#{idx} | {bi.direction.value} | "
@@ -488,7 +493,7 @@ class MultiFreqAnalysis:
                 f.write(content)
         return content
     
-    def print_summary(self):
+    def print_summary(self, show_signals: bool = False):
         """终端输出摘要"""
         primary = self.analyses.get('4h') or list(self.analyses.values())[0]
         
@@ -506,12 +511,12 @@ class MultiFreqAnalysis:
             print(f"\n  ── {fk} ──")
             print(f"  {fa.summary()}")
             
-            if fa.signals:
+            if show_signals and fa.signals:
                 for label, sigs in fa.signals.items():
                     for sig in sigs:
                         direction = FreqAnalysis.direction_label(fa.signal_direction(sig))
                         print(f"  【{label}】{direction} ✅ {getattr(sig, 'value', sig)}")
-            else:
+            elif show_signals:
                 print("  有效信号: 无（其他/任意已过滤）")
             
             div = fa.divergence_check()
@@ -563,11 +568,11 @@ def parse_args():
                 symbol = arg.upper()
         i += 1
     
-    return symbol, freqs, do_chart, do_report
+    return symbol, freqs, do_chart, do_signals, do_report
 
 
 def main():
-    symbol, freqs, do_chart, do_report = parse_args()
+    symbol, freqs, do_chart, do_signals, do_report = parse_args()
     
     # 验证 Freq
     for fk in freqs:
@@ -585,7 +590,7 @@ def main():
     
     # 分析
     mfa = MultiFreqAnalysis(symbol, freqs)
-    mfa.print_summary()
+    mfa.print_summary(show_signals=do_signals)
     
     # 图表
     if do_chart:

@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.1.1-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.1.2-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 Hermes Finance 是一个给 **Claude Code、Codex、Cursor、Gemini、Cline、Roo、Continue、VS Code Copilot 等 AI 编程/研究工具** 使用的金融市场分析框架。它把行情采集、市场路由、八维分析、CZSC 缠论确认和 MCP/Skills 接入放在同一个仓库里，目标是让 AI 不再只给“涨跌摘要”，而是按统一证据链输出可复核的市场判断。
@@ -417,6 +417,14 @@ cd skills/a-share-market-analysis/sequoia && python3 main.py
 ## 📋 更新日志
 
 所有版本详见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+### v1.1.2 (2026-06-18) — CI 与脚本稳定性修复
+
+- 新增 GitHub Actions CI，自动执行 compileall 和 unittest。
+- 修复默认 `python -m unittest discover -v` 找不到测试的问题。
+- 修复 `scripts/czsc_analyze.py --signals` 参数未生效的问题。
+- 修复 `czsc_4h_15m.py` 固定日期窗口，改为动态回看。
+- 加固 Yahoo Finance 限流、A 股远程命令构造和板块资金解析。
 
 ### v1.1.1 (2026-06-18) — AI 客户端适配补强
 

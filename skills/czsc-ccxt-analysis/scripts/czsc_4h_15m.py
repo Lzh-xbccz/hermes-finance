@@ -6,12 +6,14 @@ exchange = ccxt.binance({'enableRateLimit': True})
 
 # ── Data Fetch ──
 # 30 days of 1H → aggregate to 4H
+_since_1h = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%dT00:00:00Z')
 bars_1h_raw = exchange.fetch_ohlcv('ZEC/USDT', '1h',
-    since=exchange.parse8601('2026-05-17T00:00:00Z'), limit=720)
+    since=exchange.parse8601(_since_1h), limit=720)
 
-# 10 days of 15min  
+# 10 days of 15min
+_since_15m = (datetime.now(timezone.utc) - timedelta(days=10)).strftime('%Y-%m-%dT00:00:00Z')
 bars_15m_raw = exchange.fetch_ohlcv('ZEC/USDT', '15m',
-    since=exchange.parse8601('2026-06-07T00:00:00Z'), limit=960)
+    since=exchange.parse8601(_since_15m), limit=960)
 
 print(f"原始数据: 1H={len(bars_1h_raw)}根 | 15min={len(bars_15m_raw)}根")
 
@@ -93,7 +95,7 @@ print(f"\n--- 4H 分型 (全部 {len(c_4h.fx_list)}个) ---")
 for fx in c_4h.fx_list:
     m = 'TOP' if '顶' in str(fx.mark) else 'BOT'
     highlight = ''
-    if fx.dt >= datetime(2026, 6, 3):
+    if fx.dt >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=15):
         highlight = ' ◀◀'
     print(f"  {fx.dt.strftime('%m-%d %H:%M')} {m} @ ${fx.fx:.1f}{highlight}")
 
