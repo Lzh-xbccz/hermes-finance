@@ -387,7 +387,7 @@ class MultiFreqAnalysis:
                 f.write(content)
         return content
     
-    def print_summary(self):
+    def print_summary(self, show_signals=False):
         """终端输出摘要"""
         primary = self.analyses.get('4h') or list(self.analyses.values())[0]
         
@@ -404,7 +404,7 @@ class MultiFreqAnalysis:
             print(f"\n  ── {fk} ──")
             print(f"  {fa.summary()}")
             
-            if fa.signals:
+            if show_signals and fa.signals:
                 for name, sigs in fa.signals.items():
                     print(f"  【{name}】✅")
             
@@ -457,11 +457,11 @@ def parse_args():
                 symbol = arg.upper()
         i += 1
     
-    return symbol, freqs, do_chart, do_report
+    return symbol, freqs, do_chart, do_signals, do_report
 
 
 def main():
-    symbol, freqs, do_chart, do_report = parse_args()
+    symbol, freqs, do_chart, do_signals, do_report = parse_args()
     
     # 验证 Freq
     for fk in freqs:
@@ -479,7 +479,7 @@ def main():
     
     # 分析
     mfa = MultiFreqAnalysis(symbol, freqs)
-    mfa.print_summary()
+    mfa.print_summary(show_signals=do_signals)
     
     # 图表
     if do_chart:

@@ -6,12 +6,14 @@ exchange = ccxt.binance({'enableRateLimit': True})
 
 # ── Data Fetch ──
 # 30 days of 1H → aggregate to 4H
+_since_1h = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%dT00:00:00Z')
 bars_1h_raw = exchange.fetch_ohlcv('ZEC/USDT', '1h',
-    since=exchange.parse8601('2026-05-17T00:00:00Z'), limit=720)
+    since=exchange.parse8601(_since_1h), limit=720)
 
-# 10 days of 15min  
+# 10 days of 15min
+_since_15m = (datetime.now(timezone.utc) - timedelta(days=10)).strftime('%Y-%m-%dT00:00:00Z')
 bars_15m_raw = exchange.fetch_ohlcv('ZEC/USDT', '15m',
-    since=exchange.parse8601('2026-06-07T00:00:00Z'), limit=960)
+    since=exchange.parse8601(_since_15m), limit=960)
 
 print(f"原始数据: 1H={len(bars_1h_raw)}根 | 15min={len(bars_15m_raw)}根")
 
