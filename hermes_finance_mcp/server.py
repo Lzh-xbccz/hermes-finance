@@ -19,7 +19,11 @@ SERVER_INSTRUCTIONS = (
     "A-shares, futures, forex, and US equities. Route ambiguous symbols first, "
     "read finance://framework/{market} before final analysis, keep raw facts "
     "separate from inference, report source_status/errors, and treat CZSC as "
-    "technical confirmation rather than standalone investment advice."
+    "technical confirmation rather than standalone investment advice. For BTC, "
+    "ETH, SOL, and other crypto analysis requests, do not return a quick market "
+    "summary: fetch crypto blocks=all, run 4H+15m CZSC, then output the required "
+    "eight dimensions, seven-dimension main judgment, CZSC confirmation, final "
+    "direction, scenarios, and invalidation levels."
 )
 
 
@@ -72,7 +76,7 @@ def analyze_market_tool(
 
 @mcp.tool()
 def analyze_crypto(symbol: str, blocks: str = "all", with_czsc: bool = True, timeout: int = 240) -> dict[str, Any]:
-    """Fetch crypto multidimensional data and optional 4H/15m CZSC confirmation."""
+    """Fetch crypto data. For user-facing crypto analysis, use blocks='all' and write the eight-dimension framework."""
 
     return analyze_market("crypto", symbol, blocks=blocks, with_czsc=with_czsc, timeout=timeout)
 
@@ -152,10 +156,44 @@ def deep_market_analysis(market: str, symbol: str) -> str:
     return f"""Use Hermes Finance to analyze {market} {symbol}.
 
 1. Call route_market_tool if the market is ambiguous.
-2. Call analyze_market_tool with with_czsc=true for crypto and false for other markets unless CZSC is explicitly requested.
-3. Read finance://framework/{market} and follow that Skill's dimensional framework.
-4. Separate raw data facts from inference.
-5. Produce a clear final stance and invalidation conditions. This is technical research, not investment advice.
+2. Read finance://framework/{market} before writing the answer.
+3. For crypto, call analyze_market_tool with blocks="all" and with_czsc=true, or call analyze_crypto with blocks="all".
+4. For crypto, do not write a compressed price/contracts/macro summary. Output all eight dimensions in order, then "七维主判断", "缠论确认", "最终方向", scenarios, and invalidation conditions.
+5. For other markets, follow the target Skill's dimensional framework.
+6. Separate raw data facts from inference.
+7. Produce a clear final stance. This is technical research, not investment advice.
+"""
+
+
+@mcp.prompt()
+def crypto_eight_dimension_analysis(symbol: str) -> str:
+    """Create a strict prompt for full crypto eight-dimension analysis."""
+
+    return f"""Use Hermes Finance to analyze crypto {symbol} with the strict crypto eight-dimension framework.
+
+Required procedure:
+1. Call analyze_crypto(symbol="{symbol}", blocks="all", with_czsc=true).
+2. If CZSC details are missing or stale, call czsc_analyze_tool(symbol="{symbol}USDT", freqs="4h,15m").
+3. Read finance://framework/crypto and follow it strictly.
+
+Required output:
+- 数据完整性
+- 七维主判断
+- 缠论确认
+- 最终方向
+- 因果叙事
+- 1. 技术结构
+- 2. 链上真相
+- 3. 庄家博弈 / 合约结构
+- 4. 情绪反指
+- 5. 宏观驱动
+- 6. 交易所交叉验证
+- 7. 期权暗语
+- 8. 缠论结构
+- 情景推演
+- 交易计划和失效条件
+
+Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation.
 """
 
 

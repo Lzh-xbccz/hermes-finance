@@ -176,6 +176,8 @@ server 使用 stdio transport，适合 Claude Code、Claude Desktop、Cursor、C
 
 MCP server 会在初始化时返回统一 instructions，提示客户端先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为技术确认层。
 
+防呆规则：BTC、ETH、SOL 等 crypto 请求不能只输出快速行情摘要。客户端应拉取 `blocks=all`，运行 4H+15m CZSC，并输出完整八维、`七维主判断`、`缠论确认` 和 `最终方向`。
+
 ### MCP 配置
 
 仓库提供 `.mcp.json`：
@@ -268,6 +270,7 @@ python3 scripts/render_ai_client_config.py amp
 | Prompt | 用途 |
 |---|---|
 | `deep_market_analysis` | 生成完整市场分析流程提示 |
+| `crypto_eight_dimension_analysis` | 生成严格加密货币八维分析流程提示 |
 | `czsc_confirmation_review` | 生成缠论确认审查提示 |
 
 ### MCP smoke test

@@ -25,3 +25,5 @@ python3 -m unittest discover -s tests -v
 ```
 
 Keep raw market data, inference, missing source status, and risk notes separate.
+
+For BTC, ETH, SOL, and other crypto analysis, never stop at a quick market summary. Use `crypto` with `blocks=all`, run 4H+15m CZSC, then output all eight crypto dimensions plus `七维主判断`, `缠论确认`, and `最终方向`.

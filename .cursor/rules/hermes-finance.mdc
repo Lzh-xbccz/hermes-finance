@@ -17,3 +17,5 @@ python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
 ```
 
 Read the relevant `skills/*/SKILL.md` framework before writing a final market view. Treat CZSC as confirmation, separate raw facts from inference, and state source failures.
+
+For crypto requests such as BTC, ETH, and SOL, do not write a compressed summary. Fetch all crypto blocks, run CZSC 4H+15m, and answer with the full eight dimensions plus `七维主判断`, `缠论确认`, and `最终方向`.

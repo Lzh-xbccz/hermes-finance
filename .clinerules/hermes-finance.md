@@ -11,3 +11,5 @@ python3 -m hermes_finance analyze crypto BTC --blocks price --no-czsc
 ```
 
 For market analysis, read the matching `skills/*/SKILL.md` first and follow its dimensional framework. State source failures and separate facts from inference.
+
+For crypto analysis requests, especially BTC/ETH/SOL, always fetch all crypto blocks and run CZSC 4H+15m. The final answer must include all eight dimensions, `七维主判断`, `缠论确认`, and `最终方向`.

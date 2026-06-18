@@ -10,6 +10,8 @@ python3 bin/hermes_finance_mcp.py
 
 MCP server 初始化时会返回统一 instructions：先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为技术确认层。这对支持 MCP instructions 的客户端会自动生效。
 
+为防止 AI 工具把 `分析 BTC` 误写成快速行情摘要，MCP server instructions、MCP prompts、`AGENTS.md` 和各客户端 rules 都明确要求：BTC/ETH/SOL 等 crypto 请求必须拉取 `blocks=all`，运行 4H+15m CZSC，输出八维框架、`七维主判断`、`缠论确认`、`最终方向`。
+
 ## 支持矩阵
 
 | 工具 | 适配方式 | 文件 |
@@ -140,6 +142,7 @@ Resources:
 Prompts:
 
 - `deep_market_analysis`
+- `crypto_eight_dimension_analysis`
 - `czsc_confirmation_review`
 
 ## 验证

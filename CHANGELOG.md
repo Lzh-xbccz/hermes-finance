@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### 改进
+
+- 加强 crypto 分析防呆：MCP 初始化 instructions、`deep_market_analysis` prompt、AGENTS/Claude/Gemini/Copilot/Cursor/Windsurf/Cline/Roo 规则都明确 BTC/ETH/SOL 必须走八维框架，避免 AI 工具输出压缩行情摘要。
+- 新增 MCP prompt `crypto_eight_dimension_analysis`，用于严格生成加密货币八维分析流程。
+
 ## v1.1.1 (2026-06-18) — AI 客户端适配补强
 
 ### 新增
