@@ -23,9 +23,54 @@ UA = {
     'Expires': '0',
 }
 
+COIN_SYMBOL_ALIASES = {
+    'bitcoin': 'BTC',
+    'btc': 'BTC',
+    'ethereum': 'ETH',
+    'ether': 'ETH',
+    'eth': 'ETH',
+    'solana': 'SOL',
+    'sol': 'SOL',
+    'binancecoin': 'BNB',
+    'bnb': 'BNB',
+    'ripple': 'XRP',
+    'xrp': 'XRP',
+    'cardano': 'ADA',
+    'ada': 'ADA',
+    'dogecoin': 'DOGE',
+    'doge': 'DOGE',
+    'chainlink': 'LINK',
+    'link': 'LINK',
+    'avalanche-2': 'AVAX',
+    'avalanche': 'AVAX',
+    'avax': 'AVAX',
+    'polkadot': 'DOT',
+    'dot': 'DOT',
+    'litecoin': 'LTC',
+    'ltc': 'LTC',
+    'tron': 'TRX',
+    'trx': 'TRX',
+    'toncoin': 'TON',
+    'ton': 'TON',
+    'sui': 'SUI',
+}
+
+
+STRICT_QUERY_HOSTS = (
+    'api.binance.com',
+    'fapi.binance.com',
+    'api.bybit.com',
+    'www.okx.com',
+    'www.deribit.com',
+)
+
 
 def _bust_cache(url: str) -> str:
-    """给 URL 追加时间戳参数，绕过中间代理/CDN 缓存。"""
+    """给 URL 追加时间戳参数；严格校验参数的交易所 API 不能追加。"""
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc.lower()
+    if any(host == h or host.endswith(f'.{h}') for h in STRICT_QUERY_HOSTS):
+        return url
     import random
     ts = f'{int(time.time() * 1000)}_{random.randint(0, 9999)}'
     sep = '&' if '?' in url else '?'
@@ -35,6 +80,20 @@ def _bust_cache(url: str) -> str:
 def fetch(url, timeout=10):
     req = urllib.request.Request(_bust_cache(url), headers=UA)
     return json.load(urllib.request.urlopen(req, timeout=timeout))
+
+
+def market_symbol(coin_id: str, quote: str = 'USDT') -> str:
+    """将 CoinGecko id / 常见全名 / ticker 统一成交易所交易对。"""
+    key = coin_id.strip().lower()
+    if key.endswith(quote.lower()):
+        return key.upper()
+    base = COIN_SYMBOL_ALIASES.get(key, coin_id.strip().upper())
+    return f'{base}{quote}'
+
+
+def okx_inst_id(coin_id: str, quote: str = 'USDT') -> str:
+    symbol = market_symbol(coin_id, quote)
+    return f'{symbol[:-len(quote)]}-{quote}'
 
 def safe_fetch(url, label="", timeout=10):
     try:
@@ -62,7 +121,7 @@ def block_resolve(coin_id):
 
 # ─── 块1: 实时行情+30日历史 ───
 def block_price(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = market_symbol(coin_id)
     # 30日日线（Binance）
     d = safe_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=30', '30日价格')
     if d:
@@ -86,7 +145,7 @@ def block_price(coin_id):
 
 # ─── 块1.2+1.5: K线轨迹复盘 ───
 def block_klines(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = market_symbol(coin_id)
     # 30D 4H
     d = safe_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=4h&limit=180', '4H K线')
     if d:
@@ -145,7 +204,7 @@ def block_chain(coin_id):
 
 # ─── 块2.5: 合约市场 ───
 def block_contracts(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = market_symbol(coin_id)
     print(f'=== 🐋 {symbol} 永续合约 ===')
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -238,7 +297,7 @@ def block_contracts(coin_id):
 
 # ─── 块3: 交易所交叉验证 ───
 def block_exchanges(coin_id):
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = market_symbol(coin_id)
     print('=== 交易所交叉验证 ===')
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -256,7 +315,7 @@ def block_exchanges(coin_id):
         return None
 
     def _okx():
-        inst = coin_id.upper() + '-USDT' if coin_id != 'bitcoin' else 'BTC-USDT'
+        inst = okx_inst_id(coin_id)
         d = safe_fetch(f'https://www.okx.com/api/v5/market/ticker?instId={inst}', 'OKX')
         if d and d.get('code')=='0' and d.get('data'):
             t = d['data'][0]
@@ -298,7 +357,7 @@ def block_macro(coin_id):
     from concurrent.futures import ThreadPoolExecutor
     import urllib.parse
 
-    symbol = coin_id.upper() + 'USDT' if coin_id != 'bitcoin' else 'BTCUSDT'
+    symbol = market_symbol(coin_id)
 
     def _yf_snapshot(ticker):
         """Yahoo Finance 快照 — 轻量调用，只拉 5 天日线取最新价"""

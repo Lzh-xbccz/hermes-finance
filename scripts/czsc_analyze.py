@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Any
 
 from czsc.connectors.ccxt_connector import get_raw_bars
 from czsc import CZSC, format_standard_kline, Freq, RawBar
-from czsc.signals import cxt_first_buy_V221126, cxt_second_bs_V230320, cxt_third_buy_V230228, cxt_decision_V240614, cxt_bi_end_V230104
+from czsc._native.signals import call_signal
 
 # ══════════════════════════════════════════════════
 # CONFIG
@@ -33,12 +33,14 @@ PERIOD_MAP: Dict[str, str] = {
     '1d': '1d', '1w': '1w',
 }
 
-SIGNAL_FUNCS = {
-    '一买': cxt_first_buy_V221126,
-    '二买': cxt_second_bs_V230320,
-    '三买': cxt_third_buy_V230228,
-    '综合决策': cxt_decision_V240614,
-    '笔结束': cxt_bi_end_V230104,
+SIGNAL_DEFS = {
+    '一买': 'cxt_first_buy_V221126',
+    '一卖': 'cxt_first_sell_V221126',
+    '二买二卖': 'cxt_second_bs_V230320',
+    '三买': 'cxt_third_buy_V230228',
+    '三买三卖': 'cxt_third_bs_V230318',
+    '综合决策': 'cxt_decision_V240614',
+    '笔结束': 'cxt_bi_end_V230104',
 }
 
 DEFAULT_FREQS = ['4h', '15m']
@@ -87,13 +89,17 @@ class FreqAnalysis:
         # 当前价
         self.cur_price = bars[-1].close if bars else 0
         
-        # 信号（直接调用公开的 czsc.signals 函数）
+        # 信号：call_signal 通常即使未触发也会返回 v1=其他，必须过滤。
+        self.raw_signals: Dict[str, List[Any]] = {}
         self.signals: Dict[str, List[Any]] = {}
-        for name, sig_func in SIGNAL_FUNCS.items():
+        for label, signal_name in SIGNAL_DEFS.items():
             try:
-                res = sig_func(self.c)
+                res = call_signal(signal_name, self.c)
                 if res:
-                    self.signals[name] = res
+                    self.raw_signals[label] = res
+                    active = [s for s in res if self.is_active_signal(s)]
+                    if active:
+                        self.signals[label] = active
             except Exception:
                 pass
         
@@ -123,15 +129,46 @@ class FreqAnalysis:
     @property
     def last_bi_power(self) -> float:
         if self.c.bi_list:
-            return self.c.bi_list[-1].power
+            return self.bi_change(self.c.bi_list[-1])[1]
         return 0.0
+
+    @staticmethod
+    def bi_change(bi) -> tuple:
+        start = float(bi.fx_a.fx)
+        end = float(bi.fx_b.fx)
+        delta = end - start
+        pct = delta / start * 100 if start else 0.0
+        return delta, pct
+
+    @staticmethod
+    def is_active_signal(sig: Any) -> bool:
+        v1 = str(getattr(sig, 'v1', '') or '')
+        return v1 not in {'', '其他', '任意', '无', 'NA', 'N/A'}
+
+    @staticmethod
+    def signal_direction(sig: Any) -> str:
+        text = '_'.join(str(getattr(sig, attr, '') or '') for attr in ('v1', 'v2', 'v3', 'key', 'value'))
+        if any(x in text for x in ('开多', '做多', '看多', '买')):
+            return 'buy'
+        if any(x in text for x in ('开空', '做空', '看空', '卖')):
+            return 'sell'
+        return 'neutral'
+
+    @staticmethod
+    def direction_label(direction: str) -> str:
+        return {'buy': '买点', 'sell': '卖点', 'neutral': '中性'}[direction]
+
+    def active_signal_items(self):
+        for label, sigs in self.signals.items():
+            for sig in sigs:
+                yield label, sig, self.signal_direction(sig)
     
     def divergence_check(self) -> str:
         """背驰分析 — 比较同方向相邻笔的振幅（源自 czsc_skills by zengbin93）"""
         if len(self.c.bi_list) < 3:
             return ""
-        recent = self.c.bi_list[-3:]
-        bi1, bi2 = recent[-2], recent[-1]
+        # 缠论笔通常上下交替，比较最近两段同方向笔应取倒数第3笔和倒数第1笔。
+        bi1, bi2 = self.c.bi_list[-3], self.c.bi_list[-1]
         amp1 = abs(bi1.fx_b.fx - bi1.fx_a.fx)
         amp2 = abs(bi2.fx_b.fx - bi2.fx_a.fx)
         
@@ -149,42 +186,38 @@ class FreqAnalysis:
     
     def buy_sell_pattern(self) -> str:
         """买卖点模式识别 — 基于分型回调判断（源自 czsc_skills by zengbin93）"""
-        if len(self.c.bi_list) < 4:
+        if len(self.c.bi_list) < 3:
             return ""
-        recent = self.c.bi_list[-5:]
-        last = recent[-1]
-        parts = []
-        
-        # 识别买点：回调不破前低=二买，创新低反弹=一买
-        for i in range(1, len(recent)):
-            bi = recent[i]
-            if bi.direction.value == '向上' and recent[i-1].direction.value == '向下':
-                if i >= 2:
-                    prev_up = recent[i-2]
-                    if prev_up.direction.value == '向上':
-                        if bi.fx_a.fx > prev_up.fx_a.fx:
-                            parts.append(f"二买候补: 回调${bi.fx_a.fx:.1f}不破前低${prev_up.fx_a.fx:.1f}")
-                        elif bi.fx_a.fx < prev_up.fx_a.fx:
-                            parts.append(f"一买候补: 创新低${bi.fx_a.fx:.1f}后转向上")
-        
-        # 识别卖点
-        for i in range(1, len(recent)):
-            bi = recent[i]
-            if bi.direction.value == '向下' and recent[i-1].direction.value == '向上':
-                if i >= 2:
-                    prev_down = recent[i-2]
-                    if prev_down.direction.value == '向下':
-                        if bi.fx_a.fx < prev_down.fx_a.fx:
-                            parts.append(f"二卖候补: 反弹${bi.fx_a.fx:.1f}不过前高${prev_down.fx_a.fx}")
-                        elif bi.fx_a.fx > prev_down.fx_a.fx:
-                            parts.append(f"一卖候补: 创新高${bi.fx_a.fx:.1f}后转向下")
-        
-        return ' | '.join(parts[-3:]) if parts else ""
+        a, b, c = self.c.bi_list[-3:]
+
+        # 当前末端是向上笔：只判断当前买点候补，不回放旧卖点。
+        if a.direction.value == '向上' and b.direction.value == '向下' and c.direction.value == '向上':
+            pullback_low = c.fx_a.fx
+            prev_up_start = a.fx_a.fx
+            if pullback_low > prev_up_start:
+                return f"二买候补: 回调${pullback_low:.1f}不破前低${prev_up_start:.1f}"
+            if pullback_low < prev_up_start:
+                return f"一买候补: 创新低${pullback_low:.1f}后转向上"
+
+        # 当前末端是向下笔：只判断当前卖点候补，不回放旧买点。
+        if a.direction.value == '向下' and b.direction.value == '向上' and c.direction.value == '向下':
+            rebound_high = c.fx_a.fx
+            prev_down_start = a.fx_a.fx
+            if rebound_high < prev_down_start:
+                return f"二卖候补: 反弹${rebound_high:.1f}不过前高${prev_down_start:.1f}"
+            if rebound_high > prev_down_start:
+                return f"一卖候补: 创新高${rebound_high:.1f}后转向下"
+
+        return ""
     
     def summary(self) -> str:
         """单行摘要"""
         bi = self.c.bi_list[-1] if self.c.bi_list else None
-        bi_str = f"BI#{self.n_bi} {self.last_bi_dir} {bi.power*100:+.0f}%" if bi else "无笔"
+        if bi:
+            delta, pct = self.bi_change(bi)
+            bi_str = f"BI#{self.n_bi} {self.last_bi_dir} ${delta:+.1f} ({pct:+.2f}%)"
+        else:
+            bi_str = "无笔"
         zs_str = f"ZS ${self.zs_low:.4f}-${self.zs_high:.4f} {self.zs_position}" if self.zs_fxs else "无中枢"
         return f"{self.freq_key:>4s}: {self.n_klines}K {self.n_bi}笔 | {bi_str} | {zs_str}"
 
@@ -265,6 +298,21 @@ class MultiFreqAnalysis:
                 score += 2
             elif small_zs.high < big_zs.low:
                 score -= 2
+
+        active_buy = 0
+        active_sell = 0
+        for fa in self.analyses.values():
+            for _label, sig, direction in fa.active_signal_items():
+                if direction == 'buy':
+                    active_buy += 1
+                elif direction == 'sell':
+                    active_sell += 1
+        if active_buy or active_sell:
+            signal_score = max(min(active_buy - active_sell, 2), -2)
+            score += signal_score
+            lines.append(f"有效信号: 买点{active_buy}个 / 卖点{active_sell}个 → 评分{signal_score:+d}")
+        else:
+            lines.append("有效信号: 无；`其他/任意` 信号已过滤，不作为方向依据")
         
         if score >= 4:
             verdict = '🟢 强做多（笔+中枢+嵌套三重共振）'
@@ -281,14 +329,30 @@ class MultiFreqAnalysis:
         
         return '\n'.join(lines)
     
-    def buy_signal_summary(self) -> str:
-        """汇总所有级别的买入信号"""
+    def active_signal_summary(self) -> str:
+        """汇总所有级别的有效买卖信号"""
         results = []
         for fk, fa in self.analyses.items():
-            if fa.signals:
-                sig_str = ', '.join(fa.signals.keys())
+            items = []
+            for label, sig, direction in fa.active_signal_items():
+                items.append(f"{label}({FreqAnalysis.direction_label(direction)}:{getattr(sig, 'v1', '')})")
+            if items:
+                sig_str = ', '.join(items)
                 results.append(f"{fk}: {sig_str}")
-        return ' | '.join(results) if results else '无买入信号'
+        return ' | '.join(results) if results else '无有效买卖信号'
+
+    def inactive_signal_summary(self) -> str:
+        """汇总未触发信号，便于审计为什么不能当方向依据。"""
+        results = []
+        for fk, fa in self.analyses.items():
+            inactive = []
+            for label, sigs in fa.raw_signals.items():
+                if label not in fa.signals:
+                    vals = ','.join(str(getattr(s, 'v1', '')) for s in sigs)
+                    inactive.append(f"{label}={vals}")
+            if inactive:
+                results.append(f"{fk}: {', '.join(inactive)}")
+        return ' | '.join(results) if results else '无'
     
     def generate_charts(self, outdir: str = '/tmp', theme: str = 'dark', localize: bool = True) -> List[str]:
         """生成所有级别的 lightweight-charts，默认中文化"""
@@ -332,7 +396,8 @@ class MultiFreqAnalysis:
         lines.append(f"- **当前价**: ${primary.cur_price:.4f}")
         resonance = self.resonance_check().replace('\n', '\n  ')
         lines.append(f"- **共振判断**:\n  {resonance}")
-        lines.append(f"- **买入信号**: {self.buy_signal_summary()}")
+        lines.append(f"- **有效买卖信号**: {self.active_signal_summary()}")
+        lines.append(f"- **未触发信号**: {self.inactive_signal_summary()}")
         lines.append("")
         
         # 各级别详解
@@ -347,10 +412,13 @@ class MultiFreqAnalysis:
                 lines.append(f"- **中枢**: 无")
             
             if fa.signals:
-                lines.append("- **信号**:")
-                for name, sigs in fa.signals.items():
-                    sig_strs = [str(s) for s in sigs]
-                    lines.append(f"  - 【{name}】✅ {' | '.join(sig_strs)}")
+                lines.append("- **有效信号**:")
+                for label, sigs in fa.signals.items():
+                    for sig in sigs:
+                        direction = FreqAnalysis.direction_label(fa.signal_direction(sig))
+                        lines.append(f"  - 【{label}】{direction} ✅ {sig}")
+            else:
+                lines.append("- **有效信号**: 无（返回 `其他/任意` 的函数不算触发）")
             
             # 背驰 + 买卖点模式
             div = fa.divergence_check()
@@ -367,10 +435,11 @@ class MultiFreqAnalysis:
                 lines.append("|-----|------|------|------|------|")
                 for bi in bi_list:
                     idx = fa.c.bi_list.index(bi) + 1
+                    delta, pct = fa.bi_change(bi)
                     lines.append(
                         f"| BI#{idx} | {bi.direction.value} | "
                         f"${bi.fx_a.fx:.4f} | ${bi.fx_b.fx:.4f} | "
-                        f"{bi.power*100:+.1f}% |"
+                        f"${delta:+.1f} ({pct:+.2f}%) |"
                     )
             lines.append("")
         
@@ -397,7 +466,8 @@ class MultiFreqAnalysis:
         print(f"{'='*60}")
         print(f"  当前价: ${primary.cur_price:.4f}")
         print(f"  共振: {self.resonance_check()}")
-        print(f"  信号: {self.buy_signal_summary()}")
+        print(f"  有效信号: {self.active_signal_summary()}")
+        print(f"  未触发信号: {self.inactive_signal_summary()}")
         
         for fk in self.freq_keys:
             fa = self.analyses[fk]
@@ -405,8 +475,12 @@ class MultiFreqAnalysis:
             print(f"  {fa.summary()}")
             
             if fa.signals:
-                for name, sigs in fa.signals.items():
-                    print(f"  【{name}】✅")
+                for label, sigs in fa.signals.items():
+                    for sig in sigs:
+                        direction = FreqAnalysis.direction_label(fa.signal_direction(sig))
+                        print(f"  【{label}】{direction} ✅ {getattr(sig, 'value', sig)}")
+            else:
+                print("  有效信号: 无（其他/任意已过滤）")
             
             div = fa.divergence_check()
             if div:
