@@ -1,11 +1,11 @@
 ---
 name: multi-market-analysis
-
-> ⛔ 铁律：你不是在写行情播报，你是在做法医解剖。每句话必须回答"为什么"。禁止"可能""或许""值得关注"。每个数据必须有对比基准。每个判断必须有因果链。
 description: 跨市场分析总路由。先识别标的与市场，再指向对应 skill 处理加密货币、A股、商品期货、股指期货、外汇、美股/ETF/指数等，并统一要求按六维框架输出。Use when Codex needs one entry point for market analysis and must route the request to the correct market-specific skill instead of mixing frameworks.
 ---
 
 # Multi-Market Analysis
+
+> ⛔ 铁律：你不是在写行情播报，你是在做法医解剖。每句话必须回答"为什么"。禁止"可能""或许""值得关注"。每个数据必须有对比基准。每个判断必须有因果链。
 
 这是总入口，不是最终分析模板。先分类，再转 skill。
 
