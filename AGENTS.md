@@ -48,7 +48,8 @@ python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
 - Read the target market Skill framework before writing a final market view.
 - For every market analysis request, do not give a quick summary. Fetch full market data, run CZSC when K-lines are available, and output all eight dimensions.
 - All market answers must include `七维主判断`, `缠论确认`, and `最终方向` in that order. CZSC cannot override dimensions 1-7; if unavailable, mark dimension 8 as insufficient.
-- Treat CZSC as technical confirmation, not as the only decision layer.
+- Treat CZSC as technical confirmation, not as the primary decision layer. Never make `CZSC score` the main reason for the final stance.
+- Build `七维主判断` from dimensions 1-7 first, with the dominant driver and counter-evidence; use CZSC only to confirm, conflict, downgrade confidence, and refine entry/exit timing.
 - Separate raw facts from inference.
 - State missing data and source failures using `source_status` / `errors`.
 - This project is for technical research, not investment advice.

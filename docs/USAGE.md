@@ -176,9 +176,9 @@ python3 bin/hermes_finance_mcp.py
 
 server 使用 stdio transport，适合 Claude Code、Claude Desktop、Cursor、Codex、Gemini、Roo 等 MCP host 拉起。`bin/hermes_finance_mcp.py` 会自动定位仓库根目录并设置 `PYTHONPATH`，比直接运行 `hermes_finance_mcp/server.py` 更适合多客户端调用。
 
-MCP server 会在初始化时返回统一 instructions，提示客户端先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为技术确认层。
+MCP server 会在初始化时返回统一 instructions，提示客户端先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为第 8 维技术确认层，而不是主决策层。
 
-防呆规则：任何市场请求都不能只输出快速行情摘要。客户端应拉取完整数据，尽量运行 CZSC，并输出完整八维、`七维主判断`、`缠论确认` 和 `最终方向`；CZSC 不可用时必须标注第 8 维不足。
+防呆规则：任何市场请求都不能只输出快速行情摘要。客户端应拉取完整数据，尽量运行 CZSC，并输出完整八维、`七维主判断`、`缠论确认` 和 `最终方向`；`七维主判断` 必须先由 1-7 维得出，CZSC 只能确认/冲突/降级/细化执行，不能用 CZSC score 直接决定最终方向；CZSC 不可用时必须标注第 8 维不足。
 
 ### MCP 配置
 

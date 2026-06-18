@@ -19,12 +19,13 @@ SERVER_INSTRUCTIONS = (
     "A-shares, futures, forex, and US equities. Route ambiguous symbols first, "
     "read finance://framework/{market} before final analysis, keep raw facts "
     "separate from inference, report source_status/errors, and treat CZSC as "
-    "dimension 8 technical confirmation rather than standalone investment advice. "
+    "dimension 8 technical confirmation rather than the primary decision layer. "
     "For every market, do not return a quick market summary: fetch full data, "
     "run CZSC when K-lines are available, then output eight dimensions, "
     "seven-dimension main judgment, CZSC confirmation, final direction, "
     "scenarios, and invalidation levels. If CZSC is unavailable for a market, "
-    "mark dimension 8 as insufficient and downgrade confidence."
+    "mark dimension 8 as insufficient and downgrade confidence. Never use CZSC "
+    "score alone as the final stance; dimensions 1-7 must define the main thesis first."
 )
 
 
@@ -163,8 +164,9 @@ def deep_market_analysis(market: str, symbol: str) -> str:
 3. Call analyze_market_tool with blocks="all" and with_czsc=true, or call the market-specific analyze_* tool.
 4. Do not write a compressed market summary. Output all eight dimensions in order, then "七维主判断", "缠论确认", "最终方向", scenarios, and invalidation conditions.
 5. For non-crypto markets, map unavailable crypto-native dimensions to the target market proxies in the Skill framework and mark missing evidence explicitly.
-6. Separate raw data facts from inference.
-7. Produce a clear final stance. This is technical research, not investment advice.
+6. Build "七维主判断" from dimensions 1-7 first, including dominant driver and counter-evidence. CZSC can confirm, conflict with, or downgrade that thesis, but cannot replace it.
+7. Separate raw data facts from inference.
+8. Produce a clear final stance. This is technical research, not investment advice.
 """
 
 
@@ -196,7 +198,7 @@ Required output:
 - 情景推演
 - 交易计划和失效条件
 
-Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation.
+Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation. Never make CZSC score the main reason for the final stance.
 """
 
 
@@ -228,7 +230,7 @@ Required output:
 - 情景推演
 - 交易计划和失效条件
 
-Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation.
+Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation. Never make CZSC score the main reason for the final stance.
 """
 
 

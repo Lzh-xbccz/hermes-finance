@@ -8,9 +8,9 @@ python3 bin/hermes_finance_mcp.py
 
 这个 launcher 会自动定位仓库根目录、设置 `PYTHONPATH`，避免不同客户端从不同工作目录启动时找不到模块。
 
-MCP server 初始化时会返回统一 instructions：先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为技术确认层。这对支持 MCP instructions 的客户端会自动生效。
+MCP server 初始化时会返回统一 instructions：先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为第 8 维技术确认层，而不是主决策层。这对支持 MCP instructions 的客户端会自动生效。
 
-为防止 AI 工具把市场分析误写成快速行情摘要，MCP server instructions、MCP prompts、`AGENTS.md` 和各客户端 rules 都明确要求：所有市场尽量走八维框架，拉取完整数据，运行 CZSC 或标注第 8 维不足，输出 `七维主判断`、`缠论确认`、`最终方向`。
+为防止 AI 工具把市场分析误写成快速行情摘要，或把缠论分数当成最终交易方向，MCP server instructions、MCP prompts、`AGENTS.md` 和各客户端 rules 都明确要求：所有市场尽量走八维框架，拉取完整数据，先用 1-7 维输出 `七维主判断`，再运行 CZSC 或标注第 8 维不足，最后输出 `缠论确认`、`最终方向`。CZSC 只能确认、冲突、降级置信度或细化执行。
 
 ## 支持矩阵
 

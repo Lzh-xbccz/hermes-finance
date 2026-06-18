@@ -127,6 +127,8 @@ class FormatterTests(unittest.TestCase):
         self.assertIn("## Eight-Dimension Analysis Contract", markdown)
         self.assertIn("可执行合约层/OI/资金费率", markdown)
         self.assertIn("缠论确认", markdown)
+        self.assertIn("CZSC score", markdown)
+        self.assertIn("dimensions 1-7", markdown)
         self.assertIn("CZSC Report", markdown)
 
 
