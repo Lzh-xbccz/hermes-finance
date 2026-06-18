@@ -21,21 +21,21 @@ def load_module(name: str, path: Path):
 
 class ScriptRegressionTests(unittest.TestCase):
     def test_czsc_parse_args_returns_signals_flag(self) -> None:
-        fake_freq = types.SimpleNamespace(
-            F1=types.SimpleNamespace(value=1),
-            F5=types.SimpleNamespace(value=5),
-            F15=types.SimpleNamespace(value=15),
-            F30=types.SimpleNamespace(value=30),
-            F60=types.SimpleNamespace(value=60),
-            F120=types.SimpleNamespace(value=120),
-            F240=types.SimpleNamespace(value=240),
-            D=types.SimpleNamespace(value=1440),
-            W=types.SimpleNamespace(value=10080),
-        )
+        class FakeFreq:
+            F1 = types.SimpleNamespace(value=1)
+            F5 = types.SimpleNamespace(value=5)
+            F15 = types.SimpleNamespace(value=15)
+            F30 = types.SimpleNamespace(value=30)
+            F60 = types.SimpleNamespace(value=60)
+            F120 = types.SimpleNamespace(value=120)
+            F240 = types.SimpleNamespace(value=240)
+            D = types.SimpleNamespace(value=1440)
+            W = types.SimpleNamespace(value=10080)
+
         fake_czsc = types.ModuleType("czsc")
         fake_czsc.CZSC = object
         fake_czsc.RawBar = object
-        fake_czsc.Freq = fake_freq
+        fake_czsc.Freq = FakeFreq
         fake_czsc.format_standard_kline = lambda *args, **kwargs: []
         fake_connector = types.ModuleType("czsc.connectors.ccxt_connector")
         fake_connector.get_raw_bars = lambda *args, **kwargs: []
