@@ -3,10 +3,11 @@
     "hermes-finance": {
       "command": "python3",
       "args": ["bin/hermes_finance_mcp.py"],
-      "timeout": 600000,
       "env": {
         "PYTHONPATH": "."
-      }
+      },
+      "disabled": false,
+      "alwaysAllow": []
     }
   }
 }

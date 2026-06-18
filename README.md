@@ -2,22 +2,24 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.1.0-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.1.1-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 > 基于 [czsc](https://github.com/waditu/czsc) v1.0 缠论库，覆盖 **加密货币 / 商品期货 / 外汇 / A股 / 美股** 五大市场。每个市场采用多维因果分析框架，集成缠论作为核心技术分析维度。
 
 ---
 
-## 🚀 v1.1.0：双版本金融分析
+## 🚀 v1.1.1：双版本金融分析 + AI 客户端适配
 
 Hermes Finance 现在同时支持 **Skills** 和 **MCP** 两种使用方式：
 
 - **Skills 版**：给 Codex/Agent 使用的市场分析技能，保留八大技能目录和严格输出框架。
 - **MCP 版**：给 Claude Desktop、Cursor、支持 MCP 的 Agent 客户端调用，暴露标准 tools/resources/prompts。
+- **AI 工具适配**：新增 Claude Code、Codex、Cursor、VS Code/Copilot、Gemini、Roo、Continue、Zed 等项目级配置，以及 Claude Desktop、Windsurf、Cline、Amp 等用户级模板。
+- **MCP server instructions**：连接后自动提示 AI 先路由标的、读取市场框架、分离事实与推断，并报告数据源状态。
 - **共享核心库**：`hermes_finance/` 统一路由、采集器调用、缠论确认和 Markdown/JSON 输出，避免维护两套行情逻辑。
 
-完整安装、使用、MCP 接入、功能和排错见 [docs/USAGE.md](docs/USAGE.md)。
+完整安装、使用、MCP 接入、AI 客户端适配、功能和排错见 [docs/USAGE.md](docs/USAGE.md) 与 [docs/AI_CLIENTS.md](docs/AI_CLIENTS.md)。
 
 ---
 
@@ -27,10 +29,17 @@ Hermes Finance 现在同时支持 **Skills** 和 **MCP** 两种使用方式：
 hermes-finance/
 ├── requirements.txt                 # Python 依赖
 ├── requirements-mcp.txt             # MCP 可选依赖
-├── .mcp.json                        # MCP 客户端配置示例
+├── .mcp.json                        # Claude Code / 通用 MCP 项目配置
+├── .codex/config.toml               # Codex 项目 MCP 配置
+├── .cursor/mcp.json                 # Cursor 项目 MCP 配置
+├── .vscode/mcp.json                 # VS Code / Copilot MCP 配置
+├── .gemini/settings.json            # Gemini CLI MCP 配置
+├── .continue/mcpServers/            # Continue MCP server 配置
 ├── install.sh                       # 一键安装
 ├── VERSION                          # 版本号
 ├── CHANGELOG.md                     # 完整更新日志
+├── bin/hermes_finance_mcp.py        # 便携 MCP launcher
+├── integrations/                    # 各 AI 客户端用户级配置模板
 ├── hermes_finance/                  # 共享核心 API（CLI / Skills / MCP 共用）
 ├── hermes_finance_mcp/              # MCP server
 ├── scripts/
@@ -69,10 +78,10 @@ Skills 目录保留 8 个分析技能：
 
 ```bash
 pip install -r requirements-mcp.txt
-PYTHONPATH=. python3 hermes_finance_mcp/server.py
+python3 bin/hermes_finance_mcp.py
 ```
 
-`.mcp.json` 示例已放在仓库根目录，可直接给支持 MCP 的客户端引用。
+`.mcp.json`、`.codex/config.toml`、`.cursor/mcp.json`、`.vscode/mcp.json`、`.gemini/settings.json` 等项目级配置已放在仓库内；`integrations/` 提供 Claude Desktop、Windsurf、Cline、Amp 等用户级模板。
 
 MCP 暴露的 tools：
 
@@ -100,6 +109,30 @@ python3 -m hermes_finance route BTC
 python3 -m hermes_finance fetch futures GC
 python3 scripts/market_analyze.py crypto bitcoin --with-czsc --markdown
 ```
+
+### 4. AI 客户端适配
+
+项目内已放好常见 AI 工具的配置：
+
+| 工具 | 文件 |
+|---|---|
+| Claude Code | `.mcp.json`, `CLAUDE.md` |
+| Codex CLI / IDE | `.codex/config.toml`, `AGENTS.md` |
+| Cursor | `.cursor/mcp.json`, `.cursor/rules/hermes-finance.mdc` |
+| VS Code / GitHub Copilot | `.vscode/mcp.json`, `.github/copilot-instructions.md` |
+| Gemini CLI | `.gemini/settings.json`, `GEMINI.md` |
+| Roo / Continue / Zed | `.roo/mcp.json`, `.continue/mcpServers/hermes-finance.yaml`, `.zed/settings.json` |
+
+生成用户级配置模板：
+
+```bash
+python3 scripts/render_ai_client_config.py claude-desktop
+python3 scripts/render_ai_client_config.py windsurf
+python3 scripts/render_ai_client_config.py cline
+python3 scripts/render_ai_client_config.py codex
+```
+
+完整矩阵见 [docs/AI_CLIENTS.md](docs/AI_CLIENTS.md)。
 
 ---
 
@@ -287,6 +320,15 @@ cd skills/a-share-market-analysis/sequoia && python3 main.py
 ## 📋 更新日志
 
 所有版本详见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+### v1.1.1 (2026-06-18) — AI 客户端适配补强
+
+- 新增 portable MCP launcher：`bin/hermes_finance_mcp.py`。
+- 新增 Claude Code、Codex、Cursor、VS Code/Copilot、Gemini、Roo、Continue、Zed 项目级配置。
+- 新增 Claude Desktop、Windsurf、Cline、Amp、Continue、Zed 等 `integrations/` 用户级模板。
+- 新增 `scripts/render_ai_client_config.py`，支持渲染多客户端绝对路径配置。
+- MCP server 新增初始化 instructions，提升跨客户端使用一致性。
+- 新增 [docs/AI_CLIENTS.md](docs/AI_CLIENTS.md)，集中说明 AI 工具适配、安装位置和验证方式。
 
 ### v1.1.0 (2026-06-18) — Skills + MCP 双版本架构
 

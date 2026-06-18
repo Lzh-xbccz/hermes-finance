@@ -2,10 +2,11 @@
 
 Hermes Finance 是一个多市场金融分析框架，覆盖加密货币、商品期货、外汇、A股、美股/ETF/指数，并把缠论 CZSC 作为技术确认层。
 
-v1.1.0 起项目支持两种入口：
+v1.1.0 起项目支持两种入口，v1.1.1 起补齐常见 AI 客户端适配：
 
 - **Skills 版本**：适合 Codex/Agent 读取 `skills/*/SKILL.md` 后按市场框架完成分析。
 - **MCP 版本**：适合支持 Model Context Protocol 的客户端调用标准 tools/resources/prompts。
+- **AI 客户端配置**：适合 Claude Code、Codex、Cursor、VS Code/Copilot、Gemini、Roo、Continue、Zed 等从项目直接发现 MCP server。
 
 两种入口共用 `hermes_finance/` 核心库，底层继续复用原有采集脚本。
 
@@ -23,6 +24,7 @@ v1.1.0 起项目支持两种入口：
 | Sequoia-X | Skill / CLI | A股 7 策略量化扫描 |
 | MCP resources | MCP | `finance://routing`、`finance://framework/{market}` |
 | MCP prompts | MCP | `deep_market_analysis`、`czsc_confirmation_review` |
+| AI 客户端适配 | MCP | Claude Code、Claude Desktop、Codex、Cursor、VS Code/Copilot、Gemini、Windsurf、Cline、Roo、Continue、Zed、Amp |
 
 ## 环境要求
 
@@ -167,10 +169,12 @@ Skill 分析时应读取目标市场的 `SKILL.md`，按该市场的维度框架
 
 ```bash
 cd hermes-finance
-PYTHONPATH=. python3 hermes_finance_mcp/server.py
+python3 bin/hermes_finance_mcp.py
 ```
 
-server 使用 stdio transport，适合 Claude Desktop、Cursor、Codex/Agent 客户端等 MCP host 拉起。
+server 使用 stdio transport，适合 Claude Code、Claude Desktop、Cursor、Codex、Gemini、Roo 等 MCP host 拉起。`bin/hermes_finance_mcp.py` 会自动定位仓库根目录并设置 `PYTHONPATH`，比直接运行 `hermes_finance_mcp/server.py` 更适合多客户端调用。
+
+MCP server 会在初始化时返回统一 instructions，提示客户端先路由标的、读取对应市场框架、事实和推断分开、报告数据源失败，并把 CZSC 作为技术确认层。
 
 ### MCP 配置
 
@@ -181,7 +185,8 @@ server 使用 stdio transport，适合 Claude Desktop、Cursor、Codex/Agent 客
   "mcpServers": {
     "hermes-finance": {
       "command": "python3",
-      "args": ["hermes_finance_mcp/server.py"],
+      "args": ["bin/hermes_finance_mcp.py"],
+      "timeout": 600000,
       "env": {
         "PYTHONPATH": "."
       }
@@ -197,7 +202,7 @@ server 使用 stdio transport，适合 Claude Desktop、Cursor、Codex/Agent 客
   "mcpServers": {
     "hermes-finance": {
       "command": "python3",
-      "args": ["/absolute/path/to/hermes-finance/hermes_finance_mcp/server.py"],
+      "args": ["/absolute/path/to/hermes-finance/bin/hermes_finance_mcp.py"],
       "env": {
         "PYTHONPATH": "/absolute/path/to/hermes-finance"
       }
@@ -205,6 +210,32 @@ server 使用 stdio transport，适合 Claude Desktop、Cursor、Codex/Agent 客
   }
 }
 ```
+
+### AI 客户端适配
+
+常见项目级配置已经放在仓库内：
+
+| 工具 | 配置/说明 |
+|---|---|
+| Claude Code | `.mcp.json`, `CLAUDE.md` |
+| Codex CLI / IDE | `.codex/config.toml`, `AGENTS.md` |
+| Cursor | `.cursor/mcp.json`, `.cursor/rules/hermes-finance.mdc` |
+| VS Code / GitHub Copilot | `.vscode/mcp.json`, `.github/copilot-instructions.md` |
+| Gemini CLI | `.gemini/settings.json`, `GEMINI.md` |
+| Roo Code | `.roo/mcp.json`, `.roo/rules/hermes-finance.md` |
+| Continue | `.continue/mcpServers/hermes-finance.yaml` |
+| Zed | `.zed/settings.json` |
+
+用户级模板放在 `integrations/`，适合 Claude Desktop、Windsurf、Cline、Amp 等客户端复制合并：
+
+```bash
+python3 scripts/render_ai_client_config.py claude-desktop
+python3 scripts/render_ai_client_config.py windsurf
+python3 scripts/render_ai_client_config.py cline
+python3 scripts/render_ai_client_config.py amp
+```
+
+完整矩阵、模板路径和验证方法见 [AI_CLIENTS.md](AI_CLIENTS.md)。
 
 ### MCP tools
 
@@ -250,7 +281,7 @@ from mcp.client.stdio import stdio_client
 async def main():
     params = StdioServerParameters(
         command="python3",
-        args=["hermes_finance_mcp/server.py"],
+        args=["bin/hermes_finance_mcp.py"],
         env={"PYTHONPATH": "."},
     )
     async with stdio_client(params) as (read, write):
@@ -363,7 +394,7 @@ python3 -m hermes_finance fetch a-share --stock 600519 --remote ash-remote
 ## 开发与验证
 
 ```bash
-python3 -m compileall -q hermes_finance hermes_finance_mcp scripts skills/multi-market-analysis/scripts tests
+python3 -m compileall -q bin hermes_finance hermes_finance_mcp scripts skills/multi-market-analysis/scripts tests
 python3 -m unittest discover -s tests -v
 python3 /root/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/multi-market-analysis
 ```
@@ -377,7 +408,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 async def main():
-    params = StdioServerParameters(command="python3", args=["hermes_finance_mcp/server.py"], env={"PYTHONPATH": "."})
+    params = StdioServerParameters(command="python3", args=["bin/hermes_finance_mcp.py"], env={"PYTHONPATH": "."})
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()

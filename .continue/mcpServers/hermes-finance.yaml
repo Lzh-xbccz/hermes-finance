@@ -1,0 +1,12 @@
+name: Hermes Finance
+version: 1.0.0
+schema: v1
+mcpServers:
+  - name: Hermes Finance
+    command: python3
+    args:
+      - bin/hermes_finance_mcp.py
+    cwd: .
+    env:
+      PYTHONPATH: .
+    connectionTimeout: 20000

@@ -1,0 +1,19 @@
+---
+description: Hermes Finance market-analysis workflow and MCP entry points
+alwaysApply: true
+---
+
+# Hermes Finance
+
+Prefer the project MCP server from `.cursor/mcp.json` when it is available. The server is `hermes-finance`.
+
+Use these fallback commands:
+
+```bash
+python3 -m hermes_finance route BTC
+python3 -m hermes_finance fetch crypto BTC --blocks price
+python3 -m hermes_finance analyze crypto BTC --blocks price --no-czsc
+python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
+```
+
+Read the relevant `skills/*/SKILL.md` framework before writing a final market view. Treat CZSC as confirmation, separate raw facts from inference, and state source failures.

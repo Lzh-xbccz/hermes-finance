@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "hermesFinance": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/bin/hermes_finance_mcp.py"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  }
+}

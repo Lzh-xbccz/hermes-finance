@@ -1,12 +1,14 @@
 {
   "mcpServers": {
-    "hermes-finance": {
+    "hermes_finance": {
       "command": "python3",
       "args": ["bin/hermes_finance_mcp.py"],
-      "timeout": 600000,
+      "cwd": ".",
       "env": {
         "PYTHONPATH": "."
-      }
+      },
+      "timeout": 600000,
+      "trust": false
     }
   }
 }

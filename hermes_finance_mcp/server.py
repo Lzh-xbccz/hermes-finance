@@ -14,7 +14,16 @@ from hermes_finance.paths import PROJECT_ROOT
 from hermes_finance.service import analyze_market, czsc_analyze, fetch_market_data, route_market
 
 
-mcp = FastMCP("Hermes Finance", json_response=True)
+SERVER_INSTRUCTIONS = (
+    "Hermes Finance provides multi-market financial research tools for crypto, "
+    "A-shares, futures, forex, and US equities. Route ambiguous symbols first, "
+    "read finance://framework/{market} before final analysis, keep raw facts "
+    "separate from inference, report source_status/errors, and treat CZSC as "
+    "technical confirmation rather than standalone investment advice."
+)
+
+
+mcp = FastMCP("Hermes Finance", instructions=SERVER_INSTRUCTIONS, json_response=True)
 
 
 @mcp.tool()

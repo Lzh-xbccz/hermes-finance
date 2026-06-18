@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.1.1 (2026-06-18) — AI 客户端适配补强
+
+### 新增
+
+- 新增 `bin/hermes_finance_mcp.py` portable MCP launcher，自动定位仓库根目录并设置 `PYTHONPATH`。
+- 新增项目级 MCP / agent 配置：
+  - Claude Code：`.mcp.json`, `CLAUDE.md`
+  - Codex CLI / IDE：`.codex/config.toml`, `AGENTS.md`
+  - Cursor：`.cursor/mcp.json`, `.cursor/rules/hermes-finance.mdc`
+  - VS Code / GitHub Copilot：`.vscode/mcp.json`, `.github/copilot-instructions.md`
+  - Gemini CLI：`.gemini/settings.json`, `GEMINI.md`
+  - Roo Code：`.roo/mcp.json`, `.roo/rules/hermes-finance.md`
+  - Continue：`.continue/mcpServers/hermes-finance.yaml`
+  - Zed：`.zed/settings.json`
+- 新增 `integrations/`，提供 Claude Desktop、Windsurf、Cline、Roo、Gemini、Codex、VS Code、Cursor、Continue、Zed、Amp 等用户级模板。
+- 新增 `scripts/render_ai_client_config.py`，可按当前仓库绝对路径生成常见客户端配置。
+- 新增 `docs/AI_CLIENTS.md` 和 `integrations/README.md`，集中说明支持矩阵、安装位置、生成命令和验证方法。
+- 新增 MCP server 初始化 instructions，跨客户端统一提示路由、市场框架、数据源状态和 CZSC 使用规则。
+
+### 改进
+
+- `.mcp.json` 改用 portable launcher，并加入较长 tool timeout。
+- MCP 文档和 smoke test 统一改为 `python3 bin/hermes_finance_mcp.py`。
+
+### 验证
+
+- `python3 -m compileall -q bin scripts hermes_finance hermes_finance_mcp tests`
+- `python3 -m unittest discover -s tests -v`
+- MCP stdio client smoke：通过 `bin/hermes_finance_mcp.py` 读取 server instructions、列出 tools 并调用 `route_market_tool`。
+- `python3 scripts/render_ai_client_config.py claude-desktop`
+- `python3 scripts/render_ai_client_config.py codex`
+
 ## v1.1.0 (2026-06-18) — Skills + MCP 双版本架构
 
 ### 新增

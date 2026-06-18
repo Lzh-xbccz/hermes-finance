@@ -1,0 +1,8 @@
+[mcp_servers.hermes_finance]
+command = "python3"
+args = ["bin/hermes_finance_mcp.py"]
+cwd = ".."
+startup_timeout_sec = 20
+tool_timeout_sec = 240
+enabled = true
+default_tools_approval_mode = "prompt"
