@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 
 FETCHER = Path(__file__).resolve().parent / "futures_fetch.py"
+BINANCE_TRADFI_EXPECTED = {"CL", "BZ", "GC", "SI", "HG", "NG", "PL", "PA"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -152,21 +153,117 @@ def volume_state(rows: List[Dict[str, Any]]) -> str:
     return f"量能中性（近5根/前5根量比 {ratio:.2f}）"
 
 
+def binance_tradfi_block(data: Dict[str, Any]) -> Dict[str, Any]:
+    block = data.get("structured_drivers", {}).get("binance_tradfi_perp", {})
+    return block if isinstance(block, dict) else {}
+
+
+def binance_tradfi_available(data: Dict[str, Any]) -> bool:
+    block = binance_tradfi_block(data)
+    return bool(block.get("available") and block.get("klines"))
+
+
+def analysis_rows(data: Dict[str, Any]) -> Dict[str, Any]:
+    block = binance_tradfi_block(data)
+    klines = block.get("klines", {}) if block.get("available") else {}
+    has_binance_core = bool(klines.get("1h") and klines.get("4h") and klines.get("1d"))
+    if has_binance_core:
+        return {
+            "daily": klines["1d"],
+            "h4": klines["4h"],
+            "h1": klines["1h"],
+            "source": f"Binance {block.get('symbol', '')} TradFi Perp K线",
+            "uses_binance": True,
+        }
+    return {
+        "daily": data.get("daily_90d", []),
+        "h4": data.get("agg_4h_10d", []),
+        "h1": data.get("hourly_10d", []),
+        "source": f"{data.get('ticker', data.get('symbol', '近月代理'))} 近月代理K线",
+        "uses_binance": False,
+    }
+
+
+def fmt_number(value: Any, digits: int = 2) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if abs(number) >= 1_000_000_000:
+        return f"{number / 1_000_000_000:.{digits}f}B"
+    if abs(number) >= 1_000_000:
+        return f"{number / 1_000_000:.{digits}f}M"
+    if abs(number) >= 1_000:
+        return f"{number:,.{digits}f}"
+    return f"{number:.{digits}f}"
+
+
+def fmt_pct(value: Any, digits: int = 2) -> str:
+    try:
+        return f"{float(value):+.{digits}f}%"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def fmt_rate(value: Any, digits: int = 4) -> str:
+    try:
+        return f"{float(value) * 100:+.{digits}f}%"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def binance_tradfi_summary(data: Dict[str, Any]) -> str:
+    block = binance_tradfi_block(data)
+    if not block:
+        return "Binance TradFi 永续未配置"
+    symbol = block.get("symbol", data.get("binance_tradfi_symbol", ""))
+    if not block.get("available"):
+        return f"Binance {symbol or 'TradFi'} 永续未返回可用数据"
+    summary = block.get("summary", {})
+    return (
+        f"Binance {symbol}: last {fmt_number(summary.get('last_price'))}, "
+        f"mark/index {fmt_number(summary.get('mark_price'))}/{fmt_number(summary.get('index_price'))}, "
+        f"24h {fmt_pct(summary.get('price_change_pct_24h'))}, "
+        f"range {fmt_number(summary.get('low_24h'))}-{fmt_number(summary.get('high_24h'))}, "
+        f"quoteVol {fmt_number(summary.get('quote_volume_24h'))}, "
+        f"OI {fmt_number(summary.get('open_interest'))} ({fmt_pct(summary.get('open_interest_60m_change_pct'))}/60m), "
+        f"funding {fmt_rate(summary.get('latest_funding_rate'))}, "
+        f"top acct L/S {fmt_number(summary.get('latest_top_account_long_short_ratio'))}, "
+        f"top pos L/S {fmt_number(summary.get('latest_top_position_long_short_ratio'))}"
+    )
+
+
+def market_structure_text(data: Dict[str, Any], row_basis: Dict[str, Any]) -> str:
+    block = binance_tradfi_block(data)
+    if row_basis.get("uses_binance") and block.get("available"):
+        return (
+            f"以 Binance {block.get('symbol')} TradFi 永续作为可执行K线/资金费率/OI层；"
+            f"{data.get('ticker')} 近月代理、CFTC/EIA/OVX/DXY 用于传统期货供需与宏观验证"
+        )
+    return "以传统近月代理观察，注意单合约/近月替代限制"
+
+
 def key_block_gaps(data: Dict[str, Any]) -> List[str]:
     gaps = []
-    daily = data.get("daily_90d", [])
-    h4 = data.get("agg_4h_10d", [])
-    h1 = data.get("hourly_10d", [])
+    rows = analysis_rows(data)
+    daily = rows["daily"]
+    h4 = rows["h4"]
+    h1 = rows["h1"]
     if len(daily) < 20 or len(h4) < 12 or len(h1) < 24:
         gaps.append("技术结构")
     symbol = data["symbol"]
+    if symbol in BINANCE_TRADFI_EXPECTED and not binance_tradfi_available(data):
+        gaps.append("Binance TradFi Perp")
     proxies = data.get("proxies", {})
     required_map = {
         "CL": ["^OVX", "DX-Y.NYB"],
+        "BZ": ["^OVX", "DX-Y.NYB"],
         "GC": ["^TNX", "DX-Y.NYB"],
         "SI": ["^TNX", "DX-Y.NYB"],
         "HG": ["DX-Y.NYB"],
         "NG": ["^VIX"],
+        "PL": ["^TNX", "DX-Y.NYB"],
+        "PA": ["^TNX", "DX-Y.NYB"],
         "ES": ["^VIX", "^TNX"],
         "NQ": ["^VIX", "^TNX"],
         "YM": ["^VIX", "^TNX"],
@@ -204,7 +301,19 @@ def driver_summary(data: Dict[str, Any]) -> str:
             parts.append(f"OVX {ovx.get('price', 0):.2f}")
         if dxy:
             parts.append(f"DXY {dxy.get('change_pct', 0):+.2f}%")
+        if binance_tradfi_available(data):
+            parts.append(f"{binance_tradfi_block(data).get('symbol')} 可执行永续层")
         parts.append("关注地缘/OPEC+/库存")
+    elif symbol == "BZ":
+        ovx = proxies.get("^OVX", {})
+        dxy = proxies.get("DX-Y.NYB", {})
+        if ovx:
+            parts.append(f"OVX {ovx.get('price', 0):.2f}")
+        if dxy:
+            parts.append(f"DXY {dxy.get('change_pct', 0):+.2f}%")
+        if binance_tradfi_available(data):
+            parts.append(f"{binance_tradfi_block(data).get('symbol')} 可执行永续层")
+        parts.append("关注地缘/OPEC+/Brent-WTI价差")
     elif symbol in {"GC", "SI"}:
         tnx = proxies.get("^TNX", {})
         dxy = proxies.get("DX-Y.NYB", {})
@@ -212,7 +321,22 @@ def driver_summary(data: Dict[str, Any]) -> str:
             parts.append(f"10Y {tnx.get('change_pct', 0):+.2f}%")
         if dxy:
             parts.append(f"DXY {dxy.get('change_pct', 0):+.2f}%")
+        if binance_tradfi_available(data):
+            parts.append(f"{binance_tradfi_block(data).get('symbol')} 可执行永续层")
         parts.append("关注利率与避险")
+    elif symbol in {"HG", "NG", "PL", "PA"}:
+        dxy = proxies.get("DX-Y.NYB", {})
+        tnx = proxies.get("^TNX", {})
+        vix = proxies.get("^VIX", {})
+        if dxy:
+            parts.append(f"DXY {dxy.get('change_pct', 0):+.2f}%")
+        if tnx:
+            parts.append(f"10Y {tnx.get('change_pct', 0):+.2f}%")
+        if vix:
+            parts.append(f"VIX {vix.get('price', 0):.2f}")
+        if binance_tradfi_available(data):
+            parts.append(f"{binance_tradfi_block(data).get('symbol')} 可执行永续层")
+        parts.append("关注供需、美元与风险偏好")
     else:
         vix = proxies.get("^VIX", {})
         tnx = proxies.get("^TNX", {})
@@ -280,9 +404,39 @@ def structure_levels(rows: List[Dict[str, Any]]) -> Dict[str, float]:
 
 
 def build_report(data: Dict[str, Any]) -> str:
-    daily = data["daily_90d"]
-    h4 = data["agg_4h_10d"]
-    h1 = data["hourly_10d"]
+    row_basis = analysis_rows(data)
+    daily = row_basis["daily"]
+    h4 = row_basis["h4"]
+    h1 = row_basis["h1"]
+    if not daily and not h4 and not h1:
+        gaps = key_block_gaps(data)
+        completeness_parts = ["关键缺口：" + "、".join(gaps or ["技术结构"])]
+        if data.get("errors"):
+            completeness_parts.append("抓取缺口：" + "、".join(sorted(data["errors"].keys())))
+        lines = [
+            f"## 🎯 {data['symbol']} 期货交易决策",
+            "",
+            f"**分析时间（UTC）**：{data['analysis_time_utc']}",
+            "### 方向：⚪ 观望",
+            "",
+            "**一句话理由**：K线主源与传统近月代理均不可用，无法锚定结构位",
+            f"**数据完整性**：{';'.join(completeness_parts)}",
+            f"**K线主源**：{row_basis['source']}",
+            f"**主导驱动**：{driver_summary(data)}",
+            "",
+            "### 主导力量立场",
+            f"- Binance TradFi 永续：{binance_tradfi_summary(data)}",
+            f"- CFTC 摘要：{cftc_summary(data)}",
+            f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
+            "",
+            "### 💰 止盈止损计划",
+            "- 当前不追价，等待 K 线主源恢复后再评估",
+            "- `SL/TP` 暂不建议强行给出执行位",
+            "",
+            "### 免责声明",
+            "以上分析基于公开数据，不构成投资建议。",
+        ]
+        return "\n".join(lines)
     direction = price_bias(daily, h4)
     pattern = classify_pattern(h4)
     today = classify_today(h1[-24:] if len(h1) >= 24 else h1)
@@ -326,6 +480,7 @@ def build_report(data: Dict[str, Any]) -> str:
         f"**一句话理由**：{reason}",
         f"**数据完整性**：{completeness}",
         "**宏观时效性**：24h 期货/代理市场按抓取时点视作近实时，重大事件窗口需额外降权技术面",
+        f"**K线主源**：{row_basis['source']}",
         f"**主导驱动**：{driver_summary(data)}",
         "",
         "### 历史轨迹复盘",
@@ -342,13 +497,14 @@ def build_report(data: Dict[str, Any]) -> str:
         "",
         "### 主导力量立场",
         f"- 主导力量代理：{driver_summary(data)}",
+        f"- Binance TradFi 永续：{binance_tradfi_summary(data)}",
         f"- CFTC 摘要：{cftc_summary(data)}",
         f"- 情绪代理：{'OVX/VIX 未见异常缺口' if any(k in data.get('proxies', {}) for k in ['^OVX', '^VIX']) else '波动率代理不足'}",
         f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
         "",
         "### 六维判断",
         f"- 技术面：当前价 {last:.2f}，4H 结构与最近摆点决定方向",
-        f"- 市场结构：以近月代理观察，注意单合约/近月替代限制",
+        f"- 市场结构：{market_structure_text(data, row_basis)}",
         f"- 主导力量：{driver_summary(data)}；{cftc_summary(data)}",
         "- 情绪面：通过波动率代理和 headline 风险判断",
         f"- 宏观面：重大事件前技术权重下降；{'EIA 周报来源可用' if data.get('structured_drivers', {}).get('eia', {}).get('available') else 'EIA 结构化块暂缺'}",

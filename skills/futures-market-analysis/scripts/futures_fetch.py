@@ -11,10 +11,12 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Dict, List
 
 
 USER_AGENT = "Mozilla/5.0"
+BINANCE_FAPI_BASE = "https://fapi.binance.com"
 
 # ── 禁用缓存：确保每次拉到的都是最新数据 ──
 _NO_CACHE_HEADERS = {
@@ -45,12 +47,27 @@ def _yf_throttle():
         _time.sleep(wait)
     _YF_LAST_CALL = _time.monotonic()
 
+BINANCE_TRADFI_SYMBOLS = {
+    "CL": "CLUSDT",
+    "BZ": "BZUSDT",
+    "GC": "XAUUSDT",
+    "SI": "XAGUSDT",
+    "HG": "COPPERUSDT",
+    "NG": "NATGASUSDT",
+    "PL": "XPTUSDT",
+    "PA": "XPDUSDT",
+}
+BINANCE_TRADFI_TO_FUTURES_SYMBOL = {v: k for k, v in BINANCE_TRADFI_SYMBOLS.items()}
+
 SYMBOL_MAP = {
     "CL": {"ticker": "CL=F", "label": "WTI Crude Oil", "kind": "energy", "news": "WTI oil"},
+    "BZ": {"ticker": "BZ=F", "label": "Brent Crude Oil", "kind": "energy", "news": "Brent crude oil"},
     "GC": {"ticker": "GC=F", "label": "Gold", "kind": "metal", "news": "gold price"},
     "SI": {"ticker": "SI=F", "label": "Silver", "kind": "metal", "news": "silver price"},
     "HG": {"ticker": "HG=F", "label": "Copper", "kind": "metal", "news": "copper price"},
     "NG": {"ticker": "NG=F", "label": "Natural Gas", "kind": "energy", "news": "natural gas"},
+    "PL": {"ticker": "PL=F", "label": "Platinum", "kind": "metal", "news": "platinum price"},
+    "PA": {"ticker": "PA=F", "label": "Palladium", "kind": "metal", "news": "palladium price"},
     "ES": {"ticker": "ES=F", "label": "E-mini S&P 500", "kind": "index_future", "news": "S&P 500 futures"},
     "NQ": {"ticker": "NQ=F", "label": "E-mini Nasdaq 100", "kind": "index_future", "news": "Nasdaq futures"},
     "YM": {"ticker": "YM=F", "label": "E-mini Dow", "kind": "index_future", "news": "Dow futures"},
@@ -59,10 +76,13 @@ SYMBOL_MAP = {
 
 PROXIES = {
     "CL": ["DX-Y.NYB", "^OVX", "USO"],
+    "BZ": ["DX-Y.NYB", "^OVX", "BNO"],
     "GC": ["DX-Y.NYB", "^TNX", "GLD"],
     "SI": ["DX-Y.NYB", "SLV", "^TNX"],
     "HG": ["DX-Y.NYB", "COPX", "^TNX"],
     "NG": ["DX-Y.NYB", "^VIX", "UNG"],
+    "PL": ["DX-Y.NYB", "^TNX", "PPLT"],
+    "PA": ["DX-Y.NYB", "^TNX", "PALL"],
     "ES": ["^VIX", "^TNX", "SPY"],
     "NQ": ["^VIX", "^TNX", "QQQ"],
     "YM": ["^VIX", "^TNX", "DIA"],
@@ -71,9 +91,12 @@ PROXIES = {
 
 CFTC_FUTURES_MARKETS = {
     "CL": ("https://www.cftc.gov/dea/futures/deanymesf.htm", "CRUDE OIL"),
+    "BZ": ("https://www.cftc.gov/dea/futures/deanymesf.htm", "BRENT CRUDE OIL"),
     "GC": ("https://www.cftc.gov/dea/futures/deacmxsf.htm", "GOLD"),
     "SI": ("https://www.cftc.gov/dea/futures/deacmxsf.htm", "SILVER"),
     "HG": ("https://www.cftc.gov/dea/futures/deacmxsf.htm", "COPPER"),
+    "PL": ("https://www.cftc.gov/dea/futures/deanymesf.htm", "PLATINUM"),
+    "PA": ("https://www.cftc.gov/dea/futures/deanymesf.htm", "PALLADIUM"),
     "ES": ("https://www.cftc.gov/dea/futures/deacmesf.htm", "E-MINI S&P 500 STOCK INDEX"),
     "NQ": ("https://www.cftc.gov/dea/futures/deacmesf.htm", "NASDAQ-100 STOCK INDEX (MINI)"),
     "YM": ("https://www.cftc.gov/dea/futures/deacbotf.htm", "DJIA x $10"),
@@ -97,6 +120,21 @@ def fetch_json(url: str, retries: int = 3) -> Dict[str, Any]:
                 return json.load(resp)
         except urllib.request.HTTPError as e:
             if e.code == 429 and attempt < retries - 1:
+                time.sleep(2 ** attempt + 1)
+                continue
+            raise
+
+
+def fetch_binance_json(path: str, params: Dict[str, Any] | None = None, retries: int = 3) -> Any:
+    query = urllib.parse.urlencode(params or {})
+    url = f"{BINANCE_FAPI_BASE}{path}" + (f"?{query}" if query else "")
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=_NO_CACHE_HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return json.load(resp)
+        except urllib.request.HTTPError as e:
+            if e.code in {418, 429} and attempt < retries - 1:
                 time.sleep(2 ** attempt + 1)
                 continue
             raise
@@ -173,6 +211,154 @@ def aggregate_4h(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "volume": sum(x["volume"] for x in chunk),
         })
     return out
+
+
+def _last_number(rows: List[Dict[str, Any]], key: str) -> float | None:
+    for row in reversed(rows):
+        value = to_float(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _pct_change(first: float | None, last: float | None) -> float | None:
+    if first in {None, 0} or last is None:
+        return None
+    return (last / first - 1) * 100
+
+
+def normalize_binance_kline_rows(rows: List[List[Any]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for item in rows:
+        if len(item) < 6:
+            continue
+        ts_ms = int(item[0])
+        out.append({
+            "ts": ts_ms // 1000,
+            "time_utc": datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            "open": to_float(item[1]),
+            "high": to_float(item[2]),
+            "low": to_float(item[3]),
+            "close": to_float(item[4]),
+            "volume": to_float(item[5]) or 0.0,
+            "quote_volume": to_float(item[7]) if len(item) > 7 else None,
+            "trades": int(item[8]) if len(item) > 8 and item[8] is not None else None,
+        })
+    return [row for row in out if None not in {row["open"], row["high"], row["low"], row["close"]}]
+
+
+def _normalize_binance_time_series(rows: List[Dict[str, Any]], numeric_keys: List[str]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        ts_ms = int(row.get("timestamp") or row.get("time") or row.get("fundingTime") or 0)
+        item: Dict[str, Any] = {
+            "ts": ts_ms // 1000 if ts_ms else None,
+            "time_utc": datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if ts_ms else None,
+        }
+        for key, value in row.items():
+            item[key] = to_float(value) if key in numeric_keys else value
+        out.append(item)
+    return out
+
+
+@lru_cache(maxsize=1)
+def discover_binance_tradfi_perps() -> Dict[str, Dict[str, Any]]:
+    data = fetch_binance_json("/fapi/v1/exchangeInfo")
+    symbols = data.get("symbols", [])
+    out: Dict[str, Dict[str, Any]] = {}
+    for item in symbols:
+        if item.get("contractType") != "TRADIFI_PERPETUAL" or item.get("status") != "TRADING":
+            continue
+        if "TradFi" not in item.get("underlyingSubType", []):
+            continue
+        out[item["symbol"]] = {
+            "symbol": item.get("symbol"),
+            "base_asset": item.get("baseAsset"),
+            "quote_asset": item.get("quoteAsset"),
+            "underlying_type": item.get("underlyingType"),
+            "underlying_sub_type": item.get("underlyingSubType", []),
+            "contract_type": item.get("contractType"),
+            "status": item.get("status"),
+        }
+    return out
+
+
+def fetch_binance_tradfi_perp(symbol: str) -> Dict[str, Any]:
+    binance_symbol = BINANCE_TRADFI_SYMBOLS.get(symbol)
+    if not binance_symbol:
+        return {}
+
+    tradfi_perps = discover_binance_tradfi_perps()
+    contract = tradfi_perps.get(binance_symbol)
+    if not contract:
+        return {
+            "symbol": binance_symbol,
+            "available": False,
+            "error": "symbol not listed as Binance TRADIFI_PERPETUAL",
+        }
+
+    ticker = fetch_binance_json("/fapi/v1/ticker/24hr", {"symbol": binance_symbol})
+    premium = fetch_binance_json("/fapi/v1/premiumIndex", {"symbol": binance_symbol})
+    open_interest = fetch_binance_json("/fapi/v1/openInterest", {"symbol": binance_symbol})
+    funding = fetch_binance_json("/fapi/v1/fundingRate", {"symbol": binance_symbol, "limit": 5})
+    oi_hist = fetch_binance_json("/futures/data/openInterestHist", {"symbol": binance_symbol, "period": "5m", "limit": 12})
+    account_ratio = fetch_binance_json("/futures/data/topLongShortAccountRatio", {"symbol": binance_symbol, "period": "5m", "limit": 5})
+    position_ratio = fetch_binance_json("/futures/data/topLongShortPositionRatio", {"symbol": binance_symbol, "period": "5m", "limit": 5})
+    klines_1h = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "1h", "limit": 240}))
+    klines_4h = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "4h", "limit": 180}))
+    klines_1d = normalize_binance_kline_rows(fetch_binance_json("/fapi/v1/klines", {"symbol": binance_symbol, "interval": "1d", "limit": 120}))
+
+    funding_rows = _normalize_binance_time_series(funding, ["fundingRate", "markPrice"])
+    oi_rows = _normalize_binance_time_series(oi_hist, ["sumOpenInterest", "sumOpenInterestValue"])
+    account_rows = _normalize_binance_time_series(account_ratio, ["longAccount", "shortAccount", "longShortRatio"])
+    position_rows = _normalize_binance_time_series(position_ratio, ["longAccount", "shortAccount", "longShortRatio"])
+
+    oi_first = _last_number(oi_rows[:1], "sumOpenInterest") if oi_rows else None
+    oi_last = _last_number(oi_rows, "sumOpenInterest")
+    latest_account_ratio = _last_number(account_rows, "longShortRatio")
+    latest_position_ratio = _last_number(position_rows, "longShortRatio")
+    latest_funding = _last_number(funding_rows, "fundingRate")
+
+    return {
+        "available": True,
+        "venue": "Binance USDⓈ-M Futures",
+        "source": "https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api",
+        "symbol": binance_symbol,
+        "mapped_futures_symbol": symbol,
+        "contract": contract,
+        "summary": {
+            "last_price": to_float(ticker.get("lastPrice")),
+            "price_change_pct_24h": to_float(ticker.get("priceChangePercent")),
+            "high_24h": to_float(ticker.get("highPrice")),
+            "low_24h": to_float(ticker.get("lowPrice")),
+            "quote_volume_24h": to_float(ticker.get("quoteVolume")),
+            "mark_price": to_float(premium.get("markPrice")),
+            "index_price": to_float(premium.get("indexPrice")),
+            "basis_mark_vs_index_pct": _pct_change(to_float(premium.get("indexPrice")), to_float(premium.get("markPrice"))),
+            "open_interest": to_float(open_interest.get("openInterest")),
+            "open_interest_60m_change_pct": _pct_change(oi_first, oi_last),
+            "latest_funding_rate": latest_funding,
+            "latest_top_account_long_short_ratio": latest_account_ratio,
+            "latest_top_position_long_short_ratio": latest_position_ratio,
+            "klines": {
+                "1h": len(klines_1h),
+                "4h": len(klines_4h),
+                "1d": len(klines_1d),
+            },
+        },
+        "ticker_24h": ticker,
+        "premium_index": premium,
+        "open_interest": open_interest,
+        "funding_rate": funding_rows,
+        "open_interest_hist_5m": oi_rows,
+        "top_long_short_account_ratio_5m": account_rows,
+        "top_long_short_position_ratio_5m": position_rows,
+        "klines": {
+            "1h": klines_1h,
+            "4h": klines_4h,
+            "1d": klines_1d,
+        },
+    }
 
 
 def fetch_news(query: str, limit: int = 6) -> List[Dict[str, str]]:
@@ -364,7 +550,8 @@ def eia_proxy(symbol: str) -> Dict[str, Any]:
 
 def main() -> int:
     args = parse_args()
-    symbol = args.symbol.strip().upper()
+    requested_symbol = args.symbol.strip().upper().replace("/", "")
+    symbol = BINANCE_TRADFI_TO_FUTURES_SYMBOL.get(requested_symbol, requested_symbol)
     if symbol not in SYMBOL_MAP:
         raise SystemExit(f"Unsupported futures symbol: {symbol}")
     spec = SYMBOL_MAP[symbol]
@@ -376,6 +563,7 @@ def main() -> int:
         "ticker": ticker,
         "label": spec["label"],
         "kind": spec["kind"],
+        "binance_tradfi_symbol": BINANCE_TRADFI_SYMBOLS.get(symbol),
         "proxies": {},
         "structured_drivers": {},
         "source_status": {},
@@ -410,12 +598,16 @@ def main() -> int:
     def fetch_eia_task():
         return eia_proxy(symbol)
 
+    def fetch_binance_task():
+        return fetch_binance_tradfi_perp(symbol)
+
     # 并行执行：Yahoo组(内部串行) + 其他组(各自独立)
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=5) as pool:
         f_yahoo = pool.submit(fetch_yahoo_group)
         f_news = pool.submit(fetch_news_task)
         f_cftc = pool.submit(fetch_cftc_task)
         f_eia = pool.submit(fetch_eia_task) if symbol in {"CL", "NG"} else None
+        f_binance = pool.submit(fetch_binance_task) if symbol in BINANCE_TRADFI_SYMBOLS else None
 
         # Yahoo结果
         try:
@@ -463,6 +655,17 @@ def main() -> int:
             except Exception as exc:
                 data["errors"]["eia"] = str(exc)
                 data["source_status"]["eia"] = "error"
+
+        # Binance TradFi perpetual result
+        if f_binance:
+            try:
+                binance = f_binance.result(timeout=45)
+                if binance:
+                    data["structured_drivers"]["binance_tradfi_perp"] = binance
+                    data["source_status"]["binance_tradfi_perp"] = "ok" if binance.get("available") else "missing"
+            except Exception as exc:
+                data["errors"]["binance_tradfi_perp"] = str(exc)
+                data["source_status"]["binance_tradfi_perp"] = "error"
 
     data["agg_4h_10d"] = aggregate_4h(data.get("hourly_10d", []))
 

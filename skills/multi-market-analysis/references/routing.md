@@ -33,7 +33,8 @@ python3 scripts/route_market.py "600519"
 | 输入 | 默认市场 | 备注 |
 |------|---------|------|
 | `BTC` `ETH` `SOL` | `crypto` | |
-| `CL` `GC` `SI` `HG` `NG` | `futures` | 若用户只说“黄金/原油”，仍需警惕歧义 |
+| `CL` `BZ` `GC` `SI` `HG` `NG` `PL` `PA` | `futures` | 若用户只说“黄金/原油”，仍需警惕歧义 |
+| `CLUSDT` `BZUSDT` `XAUUSDT` `XAGUSDT` `COPPERUSDT` `NATGASUSDT` `XPTUSDT` `XPDUSDT` | `futures` | Binance TradFi 商品永续，不要按 `USDT` 误路由到 crypto |
 | `ES` `NQ` `YM` `RTY` | `futures` | 默认股指期货 |
 | `EURUSD` `USDJPY` `GBPUSD` `DXY` | `forex` | |
 | `AAPL` `MSFT` `NVDA` `SPY` `QQQ` | `us_equity` | |

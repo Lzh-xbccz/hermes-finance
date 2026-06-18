@@ -5,7 +5,7 @@ import unittest
 
 from hermes_finance.routing import classify, normalize_market
 from hermes_finance.formatters.markdown import format_market_result
-from hermes_finance.service import analyze_market, crypto_pair_symbol, route_market
+from hermes_finance.service import analyze_market, crypto_pair_symbol, futures_symbol, route_market
 
 
 class RoutingTests(unittest.TestCase):
@@ -17,6 +17,11 @@ class RoutingTests(unittest.TestCase):
 
     def test_forex_route(self) -> None:
         self.assertEqual(classify("EURUSD")["market"], "forex")
+
+    def test_binance_tradfi_perp_routes_to_futures_before_crypto(self) -> None:
+        result = classify("CLUSDT")
+        self.assertEqual(result["market"], "futures")
+        self.assertIn("Binance TradFi", result["reason"])
 
     def test_market_aliases(self) -> None:
         self.assertEqual(normalize_market("a-share"), "a_share")
@@ -32,6 +37,11 @@ class ServiceTests(unittest.TestCase):
     def test_crypto_pair_symbol(self) -> None:
         self.assertEqual(crypto_pair_symbol("bitcoin"), "BTCUSDT")
         self.assertEqual(crypto_pair_symbol("ETHUSDT"), "ETHUSDT")
+
+    def test_futures_symbol_aliases_binance_tradfi_perps(self) -> None:
+        self.assertEqual(futures_symbol("CLUSDT"), "CL")
+        self.assertEqual(futures_symbol("XAUUSDT"), "GC")
+        self.assertEqual(futures_symbol("COPPERUSDT"), "HG")
 
     @mock.patch("hermes_finance.service.fetch_market_data")
     @mock.patch("hermes_finance.service.czsc_analyze")

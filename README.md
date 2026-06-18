@@ -153,7 +153,7 @@ python3 scripts/render_ai_client_config.py codex
 
 ### 2. 商品期货 — 六维分析 🟡
 
-覆盖 CL（原油）、GC（黄金）、ES（标普500）、NG（天然气）：
+覆盖 CL（WTI 原油）、BZ（Brent 原油）、GC（黄金）、SI（白银）、HG（铜）、NG（天然气）、PL（铂金）、PA（钯金）、ES/NQ/YM/RTY（股指期货）；商品线自动接入 Binance TradFi 永续 `CLUSDT`、`BZUSDT`、`XAUUSDT`、`XAGUSDT`、`COPPERUSDT`、`NATGASUSDT`、`XPTUSDT`、`XPDUSDT`：
 
 | 维度 | 数据源 |
 |------|--------|
@@ -163,6 +163,8 @@ python3 scripts/render_ai_client_config.py codex
 | 资金面 | **COT报告（CSV优先，HTML降级）** + OI变化 |
 | 跨市场 | 相关品种联动 |
 | 季节性 | 历史同期表现 |
+
+Binance TradFi 商品永续作为可执行 K 线、资金费率、OI、多空比层；Yahoo 近月代理、CFTC、EIA、OVX/DXY 继续作为传统期货和宏观验证层。
 
 ### 3. 外汇 — 六维分析 + 利率差 🔵
 
@@ -214,7 +216,7 @@ res = cxt_first_buy_V221126(c)
 | 输入 | 路由到 |
 |------|--------|
 | `BTC` / `ETH` / `SOL` | crypto-market-analysis |
-| `CL` / `GC` / `ES` | futures-market-analysis |
+| `CL` / `GC` / `ES` / `CLUSDT` / `XAUUSDT` | futures-market-analysis |
 | `EURUSD` / `DXY` | forex-market-analysis |
 | `600519` / `000001` | a-share-market-analysis |
 | `AAPL` / `SPY` | us-equity-market-analysis |

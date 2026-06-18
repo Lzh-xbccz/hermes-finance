@@ -1,12 +1,6 @@
 ---
 name: futures-market-analysis
-description: "商品期货、贵金属、能源、股指期货日内/波段分析：六维数据拉取 + 单一方向决策 + 结构锚定止盈止损。覆盖 CL/GC/SI/HG/NG/ES/NQ/YM/RTY。"
-version: 3.0.0
-author: Hermes
-metadata:
-  hermes:
-    tags: [futures, commodities, crude-oil, macro-rates, yield-curve, dxy, catalyst, fomc, gold, silver, copper, natural-gas, equity-index, sp500, nasdaq, dow, russell, trading, technical-analysis, macro, news, ovx, vix, term-structure, contango, backwardation, decision, stop-loss, take-profit]
-    related_skills: []
+description: "商品期货、贵金属、能源、股指期货日内/波段分析：六维数据拉取 + 单一方向决策 + 结构锚定止盈止损。覆盖 CL/BZ/GC/SI/HG/NG/PL/PA/ES/NQ/YM/RTY，并识别 Binance TradFi 商品永续 CLUSDT/BZUSDT/XAUUSDT/XAGUSDT/COPPERUSDT/NATGASUSDT/XPTUSDT/XPDUSDT 的K线、资金费率、OI、多空比。"
 ---
 
 # 期货市场六维分析全流程
@@ -111,7 +105,7 @@ metadata:
 
 ```text
 1. 记录分析时间（UTC）
-2. 确认标的符号（CL=F / GC=F / SI=F / HG=F / NG=F / ES=F / NQ=F / YM=F / RTY=F）
+2. 确认标的符号（CL=F / BZ=F / GC=F / SI=F / HG=F / NG=F / PL=F / PA=F / ES=F / NQ=F / YM=F / RTY=F）
 3. 确认合约月份假设（默认近月代理，特别标注）
 4. 检查是否处于重大事件窗口（EIA 库存日、OPEC 会议、FOMC、非农等）
 ```
@@ -119,6 +113,8 @@ metadata:
 **执行规则：**
 - 用户给精确合约月份时，按用户给定
 - 用户只给简称时，用近月代理 `{SYM}=F`，但要写明假设
+- 用户给 Binance TradFi 商品永续时，先映射到期货 root：`CLUSDT -> CL`、`BZUSDT -> BZ`、`XAUUSDT -> GC`、`XAGUSDT -> SI`、`COPPERUSDT -> HG`、`NATGASUSDT -> NG`、`XPTUSDT -> PL`、`XPDUSDT -> PA`
+- Binance TradFi 商品永续可作为可执行 K 线/资金费率/OI/多空比层；传统近月代理、CFTC、EIA、OVX/DXY 仍作为供需、宏观和传统期货验证层
 - 如果当前处于一级或二级事件窗口，先判断是否需要强制观望
 - 若当前价格已经贴近最近主阻力/主支撑，导致首个止盈空间过小、盈亏比低于 1.5，则不追价，等待回踩/反抽或直接观望
 
@@ -215,10 +211,23 @@ TP3 = 形态理论目标
 ```bash
 # 一键采集所有数据（内置429重试+并行+Yahoo串行限速）
 python3 /root/.hermes/skills/research/futures-market-analysis/scripts/futures_fetch.py GC --compact
-# 替换 GC 为: CL / GC / SI / HG / NG / ES / NQ / YM / RTY
+# 替换 GC 为: CL / BZ / GC / SI / HG / NG / PL / PA / ES / NQ / YM / RTY
+# 也可直接传 Binance TradFi 商品永续: CLUSDT / BZUSDT / XAUUSDT / XAGUSDT / COPPERUSDT / NATGASUSDT / XPTUSDT / XPDUSDT
 ```
 
-脚本输出完整 JSON，包含：daily_90d、hourly_10d、agg_4h_10d、proxies(DXY/VIX/ETF)、news、cftc。
+脚本输出完整 JSON，包含：daily_90d、hourly_10d、agg_4h_10d、proxies(DXY/VIX/ETF)、news、cftc；若 Binance TradFi 商品永续可用，还包含 `structured_drivers.binance_tradfi_perp` 的 1H/4H/1D K线、24h ticker、mark/index、资金费率、OI、OI历史、多空账户/仓位比。
+
+**Binance TradFi 商品永续优先级**：
+- `CL -> CLUSDT`
+- `BZ -> BZUSDT`
+- `GC -> XAUUSDT`
+- `SI -> XAGUSDT`
+- `HG -> COPPERUSDT`
+- `NG -> NATGASUSDT`
+- `PL -> XPTUSDT`
+- `PA -> XPDUSDT`
+
+这些 Binance 符号代表可交易的 USDT 永续层，优先用于可执行 K 线、资金费率、OI 和多空比；`CL=F` / `GC=F` 等传统近月代理、CFTC、EIA、OVX/DXY 用于传统期货、供需和宏观验证。不要把 `CLUSDT`、`XAUUSDT` 这类 TradFi 商品永续误路由到 crypto skill。
 
 **⚠️ Yahoo 429 降级路径（2026-05-20 实测验证）**：
 
@@ -244,7 +253,7 @@ queries = [
    - VIX：Investing.com (历史表)、CBOE 官方
    - 10Y：YCharts、Treasury.gov 官方数据、Investing.com
 
-4. **🆕 GC 专用 K 线补充方案**：当 GC=F 被 Yahoo 429 阻断时，通过 **PAXG/USDT（Binance）** 获取完整 K 线结构：
+4. **GC 最后兜底 K 线补充方案**：当 GC=F 被 Yahoo 429 阻断且 `XAUUSDT` TradFi 永续不可用时，才通过 **PAXG/USDT（Binance spot）** 获取黄金技术结构代理：
    ```python
    # PAXG ≈ 1 troy oz gold，与 GC=F 偏差 <0.1%
    # Binance API 无需鉴权，无频率限制问题
@@ -263,13 +272,14 @@ queries = [
 
 6. **降级标记**：报告中必须写「⚠️ 技术面数据缺口：Yahoo 429，价格/DXY/VIX/10Y 来自 Tavily 搜索」。SL/TP 精度下降一档。
 
-### 🔶 Binance PAXG 替代方案（黄金 GC 专属，2026-05-21 实测）
+### 🔶 Binance PAXG 最后兜底方案（黄金 GC 专属，2026-05-21 实测）
 
-> 当 Yahoo 429 导致 K 线数据缺失时，**PAXG/USDT（币安）** 可作为黄金 COMEX 期货的技术结构代理。
+> 当 Yahoo 429 导致 K 线数据缺失，且 `XAUUSDT` Binance TradFi 黄金永续不可用时，**PAXG/USDT（币安现货）** 才可作为黄金 COMEX 期货的技术结构代理。
 > PAXG = Paxos Gold，1 token ≈ 1 盎司黄金，与 GC=F 偏差 <0.1%。
 
 **使用条件**：
 - 仅限 GC（黄金）。白银/原油/股指不适用此方法
+- 优先级低于 `XAUUSDT` TradFi 永续；不要在 `XAUUSDT` 可用时优先使用 PAXG
 - PAXG 在币安的流动性远低于 COMEX（日均 3K-7K 手），**结构位有效但下单应以 COMEX 合约为准**
 - 当前日成交量不足 500 时标注「超低流动性警告」
 
@@ -400,17 +410,20 @@ print(f'52周低: {meta.get(\"fiftyTwoWeekLow\",\"?\"):,.2f}')
 
 **所有可分析标的符号表：**
 
-| 品种 | Yahoo 代码 | 波动率代理 | ETF 代理 | 类别 |
-|------|-----------|-----------|---------|------|
-| WTI 原油 | `CL=F` | `^OVX` | `USO` | 能源 |
-| 黄金 | `GC=F` | `^VIX`（替代） | `GLD` | 贵金属 |
-| 白银 | `SI=F` | `^VIX`（替代） | `SLV` | 贵金属 |
-| 铜 | `HG=F` | `^VIX`（替代） | — | 工业金属 |
-| 天然气 | `NG=F` | `^OVX`（部分参考） | `UNG` | 能源 |
-| 标普500 | `ES=F` | `^VIX` | `SPY` | 股指 |
-| 纳斯达克100 | `NQ=F` | `^VIX` | `QQQ` | 股指 |
-| 道琼斯 | `YM=F` | `^VIX` | `DIA` | 股指 |
-| 罗素2000 | `RTY=F` | `^VIX` | `IWM` | 股指 |
+| 品种 | Yahoo 代码 | Binance TradFi 永续 | 波动率代理 | ETF 代理 | 类别 |
+|------|-----------|----------------------|-----------|---------|------|
+| WTI 原油 | `CL=F` | `CLUSDT` | `^OVX` | `USO` | 能源 |
+| Brent 原油 | `BZ=F` | `BZUSDT` | `^OVX` | `BNO` | 能源 |
+| 黄金 | `GC=F` | `XAUUSDT` | `^VIX`（替代） | `GLD` | 贵金属 |
+| 白银 | `SI=F` | `XAGUSDT` | `^VIX`（替代） | `SLV` | 贵金属 |
+| 铜 | `HG=F` | `COPPERUSDT` | `^VIX`（替代） | `COPX` | 工业金属 |
+| 天然气 | `NG=F` | `NATGASUSDT` | `^OVX`（部分参考） | `UNG` | 能源 |
+| 铂金 | `PL=F` | `XPTUSDT` | `^VIX`（替代） | `PPLT` | 贵金属 |
+| 钯金 | `PA=F` | `XPDUSDT` | `^VIX`（替代） | `PALL` | 贵金属 |
+| 标普500 | `ES=F` | — | `^VIX` | `SPY` | 股指 |
+| 纳斯达克100 | `NQ=F` | — | `^VIX` | `QQQ` | 股指 |
+| 道琼斯 | `YM=F` | — | `^VIX` | `DIA` | 股指 |
+| 罗素2000 | `RTY=F` | — | `^VIX` | `IWM` | 股指 |
 
 ### 块 1.2：历史轨迹复盘 — 30D 4H 聚合 ⚠️ 必做
 
@@ -937,7 +950,7 @@ echo "  ⚪ 四级: 常规供需/评论 → 技术面正常权重"
 ## 🎯 [标的名称] 期货交易决策
 
 **分析时间（UTC）**：[YYYY-MM-DD HH:MM]
-**合约**：[CL=F / GC=F / ES=F 等，近月代理假设]
+**合约**：[CL=F / GC=F / ES=F 等，近月代理假设；若可用，注明 Binance TradFi 永续如 CLUSDT/XAUUSDT 为可执行层]
 **数据完整性**：[完整 / 缺少哪几块；若关键块缺失则只能观望]
 **事件权重**：[技术主导 / 事件主导 / 混合] — 当前事件等级：⚪/🟡/🔴/🚨
 
@@ -1198,7 +1211,7 @@ echo "  ⚪ 四级: 常规供需/评论 → 技术面正常权重"
 
 ## 九、非期货标的处理
 
-当用户要求分析的品种不在 `CL/GC/SI/HG/NG/ES/NQ/YM/RTY` 范围内时：
+当用户要求分析的品种不在 `CL/BZ/GC/SI/HG/NG/PL/PA/ES/NQ/YM/RTY` 范围内时：
 
 1. **先判断是否可通过 Yahoo Finance `{SYM}=F` 格式覆盖**：如 `ZC=F`（玉米）、`ZS=F`（大豆）、`ZW=F`（小麦）等农产品期货
 2. **若可覆盖**：沿用本框架，但需标注「品种专属逻辑缺失，按通用商品逻辑分析」

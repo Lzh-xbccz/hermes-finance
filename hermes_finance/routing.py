@@ -49,6 +49,19 @@ def classify(text: str) -> dict[str, Any]:
     s = (text or "").strip()
     u = s.upper()
 
+    binance_tradfi_futures = {
+        "CLUSDT",
+        "BZUSDT",
+        "XAUUSDT",
+        "XAGUSDT",
+        "COPPERUSDT",
+        "NATGASUSDT",
+        "XPTUSDT",
+        "XPDUSDT",
+    }
+    if any(re.search(rf"\b{sym}\b", u) for sym in binance_tradfi_futures):
+        return {"market": "futures", "reason": "matched Binance TradFi commodity perpetual"}
+
     if re.search(r"\b(SH|SZ)\d{6}\b", u) or re.search(r"\b(000|001|002|003|300|600|601|603|605|688)\d{3}\b", u):
         return {"market": "a_share", "reason": "matched A-share style code"}
     if any(k in s for k in ["A股", "上证", "深证", "创业板", "沪深", "科创板"]):
@@ -85,10 +98,13 @@ def classify(text: str) -> dict[str, Any]:
 
     futures_symbols = {
         "CL",
+        "BZ",
         "GC",
         "SI",
         "HG",
         "NG",
+        "PL",
+        "PA",
         "RB",
         "HO",
         "ZC",

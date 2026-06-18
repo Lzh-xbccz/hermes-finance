@@ -4,6 +4,9 @@
 
 ### 改进
 
+- 期货/商品分析新增 Binance TradFi 商品永续层：`CLUSDT`、`BZUSDT`、`XAUUSDT`、`XAGUSDT`、`COPPERUSDT`、`NATGASUSDT`、`XPTUSDT`、`XPDUSDT`，采集 1H/4H/1D K线、24h ticker、mark/index、资金费率、OI、OI历史、多空账户/仓位比。
+- 共享路由和 service 识别 Binance TradFi 商品永续，避免 `CLUSDT` / `XAUUSDT` 因 `USDT` 被误路由到 crypto；CLI/MCP 可直接传这些符号并映射到 futures root。
+- futures skill 更新商品覆盖范围与 Binance TradFi 使用规则，黄金 PAXG 现货代理降级为 `XAUUSDT` 不可用时的最后兜底。
 - 加强 crypto 分析防呆：MCP 初始化 instructions、`deep_market_analysis` prompt、AGENTS/Claude/Gemini/Copilot/Cursor/Windsurf/Cline/Roo 规则都明确 BTC/ETH/SOL 必须走八维框架，避免 AI 工具输出压缩行情摘要。
 - 新增 MCP prompt `crypto_eight_dimension_analysis`，用于严格生成加密货币八维分析流程。
 - `analyze_market` 的 Markdown 输出新增 `Crypto Analysis Contract`，从工具返回层强制提示八维结构、七维主判断、缠论确认和最终方向。

@@ -51,6 +51,17 @@ COIN_SYMBOL_ALIASES = {
     "sui": "SUI",
 }
 
+FUTURES_SYMBOL_ALIASES = {
+    "CLUSDT": "CL",
+    "BZUSDT": "BZ",
+    "XAUUSDT": "GC",
+    "XAGUSDT": "SI",
+    "COPPERUSDT": "HG",
+    "NATGASUSDT": "NG",
+    "XPTUSDT": "PL",
+    "XPDUSDT": "PA",
+}
+
 
 def route_market(text: str) -> dict[str, Any]:
     """Route text or a symbol to a market id."""
@@ -68,6 +79,13 @@ def crypto_pair_symbol(symbol: str, quote: str = "USDT") -> str:
         return key.upper()
     base = COIN_SYMBOL_ALIASES.get(key, symbol.strip().upper())
     return f"{base}{quote}"
+
+
+def futures_symbol(symbol: str) -> str:
+    """Normalize a futures shorthand or Binance TradFi perpetual into the internal root."""
+
+    key = symbol.strip().upper().replace("/", "")
+    return FUTURES_SYMBOL_ALIASES.get(key, key)
 
 
 def fetch_market_data(
@@ -99,14 +117,16 @@ def fetch_market_data(
         }
 
     script = MARKET_SCRIPT[normalized]
-    args = _collector_args(normalized, symbol=symbol, blocks=blocks, stock=stock, remote=remote)
+    collector_symbol = futures_symbol(symbol) if normalized == "futures" and symbol else symbol
+    args = _collector_args(normalized, symbol=collector_symbol, blocks=blocks, stock=stock, remote=remote)
     result = run_python_script(script, args, timeout=timeout)
     data = parse_json_output(result["stdout"])
 
     return {
         "ok": result["ok"],
         "market": normalized,
-        "symbol": _display_symbol(normalized, symbol=symbol, stock=stock),
+        "symbol": _display_symbol(normalized, symbol=collector_symbol, stock=stock),
+        "requested_symbol": symbol,
         "route": routed,
         "collector": str(script.relative_to(PROJECT_ROOT)),
         "command": result["command"],
