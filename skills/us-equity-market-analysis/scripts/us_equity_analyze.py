@@ -208,6 +208,48 @@ def _proxy_price(data: Dict[str, Any], name: str) -> float | None:
         return None
 
 
+def _us_equity_dimension(reason: str) -> str:
+    if reason.startswith("技术结构") or "主导手法" in reason:
+        return "技术结构"
+    if reason.startswith(("SPY", "QQQ")):
+        return "市场/ETF"
+    if reason.startswith(("VIX", "10Y")):
+        return "宏观利率/情绪"
+    if reason.startswith(("公司事件", "公司业务事件", "监管/诉讼")):
+        return "公司事件"
+    return "其他"
+
+
+def _dimensionize_votes(votes: Dict[str, List[str]], classifier) -> Dict[str, List[str]]:
+    buckets: Dict[str, Dict[str, List[str]]] = {}
+    for side in ("做多", "做空"):
+        for reason in votes.get(side, []):
+            bucket = classifier(reason)
+            buckets.setdefault(bucket, {"做多": [], "做空": []})[side].append(reason)
+
+    collapsed: Dict[str, Any] = {
+        "做多": [],
+        "做空": [],
+        "neutral": list(votes.get("neutral", [])),
+        "veto": list(votes.get("veto", [])),
+        "dimensions": {},
+    }
+    for name, sides in buckets.items():
+        long_reasons = sides["做多"]
+        short_reasons = sides["做空"]
+        if long_reasons and not short_reasons:
+            collapsed["做多"].append(f"{name}: {'；'.join(long_reasons)}")
+            collapsed["dimensions"][name] = {"stance": "做多", "reasons": long_reasons}
+        elif short_reasons and not long_reasons:
+            collapsed["做空"].append(f"{name}: {'；'.join(short_reasons)}")
+            collapsed["dimensions"][name] = {"stance": "做空", "reasons": short_reasons}
+        else:
+            reason = "多空内部冲突：多(" + "；".join(long_reasons) + ") / 空(" + "；".join(short_reasons) + ")"
+            collapsed["neutral"].append(f"{name}: {reason}")
+            collapsed["dimensions"][name] = {"stance": "中性", "reasons": long_reasons + short_reasons}
+    return collapsed
+
+
 def directional_evidence(data: Dict[str, Any]) -> Dict[str, List[str]]:
     votes: Dict[str, List[str]] = {"做多": [], "做空": [], "veto": [], "neutral": []}
     technical = direction(data)
@@ -265,8 +307,15 @@ def directional_evidence(data: Dict[str, Any]) -> Dict[str, List[str]]:
                     votes["neutral"].append(f"公司事件未定向：{event.get('title')}")
             elif event_type == "regulatory_proxy":
                 votes["做空"].append(f"监管/诉讼风险：{event.get('title')}")
+            elif event_type == "business_proxy":
+                if any(token in title for token in ["delay", "cut", "weak", "risk", "falls", "probe"]):
+                    votes["做空"].append(f"公司业务事件偏空：{event.get('title')}")
+                elif any(token in title for token in ["launch", "contract", "approval", "growth", "strong", "ai", "chip", "product"]):
+                    votes["做多"].append(f"公司业务事件偏多：{event.get('title')}")
+                else:
+                    votes["neutral"].append(f"公司业务事件未定向：{event.get('title')}")
 
-    return votes
+    return _dimensionize_votes(votes, _us_equity_dimension)
 
 
 def _neutral_direction(data: Dict[str, Any]) -> str:
@@ -280,22 +329,22 @@ def direction_from_evidence(data: Dict[str, Any], votes: Dict[str, List[str]] | 
     long_count = len(votes["做多"])
     short_count = len(votes["做空"])
     if data.get("instrument_type") == "index":
-        if long_count >= 4 and long_count - short_count >= 2:
+        if long_count >= 3 and long_count - short_count >= 2:
             return "偏多"
-        if short_count >= 4 and short_count - long_count >= 2:
+        if short_count >= 3 and short_count - long_count >= 2:
             return "偏空"
         return "震荡"
-    if long_count >= 4 and long_count - short_count >= 2:
+    if long_count >= 3 and long_count - short_count >= 2:
         return "做多"
-    if short_count >= 4 and short_count - long_count >= 2:
+    if short_count >= 3 and short_count - long_count >= 2:
         return "做空"
     return _neutral_direction(data)
 
 
 def direction_quality_text(votes: Dict[str, List[str]]) -> str:
     return (
-        f"多头证据 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
-        f"空头证据 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"多头独立维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"空头独立维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
         f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
         f"硬性降级：{'; '.join(votes['veto']) or '无'}"
     )
@@ -315,7 +364,7 @@ def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str
         return f"多空证据数量相同，方向质量不足，最终{neutral_label}"
     if abs(long_count - short_count) < 2:
         return f"多空证据差距小于 2 项，未通过方向质量门槛，最终{neutral_label}"
-    return f"同向证据少于 4 项，未形成可执行方向优势，最终{neutral_label}"
+    return f"同向维度少于 3 项，未形成可执行方向优势，最终{neutral_label}"
 
 
 def driver_summary(data: Dict[str, Any]) -> str:

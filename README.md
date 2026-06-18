@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.1.3-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.1.4-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 Hermes Finance 是一个给 **Claude Code、Codex、Cursor、Gemini、Cline、Roo、Continue、VS Code Copilot 等 AI 编程/研究工具** 使用的金融市场分析框架。它把行情采集、市场路由、八维分析、CZSC 缠论确认和 MCP/Skills 接入放在同一个仓库里，目标是让 AI 不再只给“涨跌摘要”，而是按统一证据链输出可复核的市场判断。
@@ -419,6 +419,13 @@ cd skills/a-share-market-analysis/sequoia && python3 main.py
 ## 📋 更新日志
 
 所有版本详见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+### v1.1.4 (2026-06-18) — 独立维度方向门槛
+
+- 方向判断改为先合并独立维度，再过门槛，避免同类代理重复投票。
+- 期货补强 CFTC、供需/库存/地缘/OPEC/天气维度；EIA 无库存增减数值时只作中性缺口。
+- 修复外汇 CFTC 对手货币方向映射和美股公司业务事件维度归类。
+- 新增回归测试覆盖这些方向错误场景。
 
 ### v1.1.3 (2026-06-18) — 方向质量门槛与反向审计
 

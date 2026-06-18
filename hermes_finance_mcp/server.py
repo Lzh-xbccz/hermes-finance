@@ -167,7 +167,7 @@ def deep_market_analysis(market: str, symbol: str) -> str:
 3. Call analyze_market_tool with blocks="all" and with_czsc=true, or call the market-specific analyze_* tool.
 4. Do not write a compressed market summary. Output all eight dimensions in order, then "七维主判断", "方向质量门槛", "反向审计", "缠论确认", "最终方向", scenarios, and invalidation conditions.
 5. For non-crypto markets, map unavailable crypto-native dimensions to the target market proxies in the Skill framework and mark missing evidence explicitly.
-6. Build "七维主判断" from dimensions 1-7 first, including dominant driver and counter-evidence. Then apply a direction quality gate: only give 做多/做空 when one side has broad evidence support and no hard veto; otherwise output 观望/震荡/无方向优势.
+6. Build "七维主判断" from dimensions 1-7 first, including dominant driver and counter-evidence. Then apply a direction quality gate: only give 做多/做空 when one side has broad independent-dimension support and no hard veto; do not count correlated proxies such as DXY/10Y/rate spread or SPY/QQQ/VIX as separate dimensions; otherwise output 观望/震荡/无方向优势.
 7. Run "反向审计" before final direction: test the strongest opposite thesis and downgrade if it is comparable.
 8. Separate raw data facts from inference.
 9. Produce a clear final stance, but do not force a trade. "No directional edge" is a valid final stance. This is technical research, not investment advice.

@@ -142,6 +142,147 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data)
         self.assertEqual(votes["veto"], [])
 
+    def test_forex_related_usd_rates_count_as_one_dimension(self) -> None:
+        mod = load_module(
+            "forex_analyze_dimension_gate",
+            ROOT / "skills" / "forex-market-analysis" / "scripts" / "forex_analyze.py",
+        )
+        rows = ohlc_rows(40, step=0.001)
+        data = {
+            "symbol": "USDJPY",
+            "daily_90d": rows,
+            "agg_4h_10d": rows,
+            "hourly_10d": rows,
+            "proxies": {
+                "DX-Y.NYB": {"change_pct": 0.6},
+                "^TNX": {"change_pct": 0.8},
+                "^VIX": {"change_pct": 0.0},
+            },
+            "structured_drivers": {"rates": {"diff_signal": "🟢 USD利差优势 +1.0%"}},
+            "upcoming_macro_events": [],
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(len(votes["做多"]), 2)
+        self.assertEqual(mod.direction_from_evidence(data, votes), "观望")
+
+    def test_forex_cftc_quote_currency_maps_against_pair(self) -> None:
+        mod = load_module(
+            "forex_analyze_cftc_pair_mapping",
+            ROOT / "skills" / "forex-market-analysis" / "scripts" / "forex_analyze.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "symbol": "USDJPY",
+            "daily_90d": rows,
+            "agg_4h_10d": rows,
+            "hourly_10d": rows,
+            "proxies": {
+                "DX-Y.NYB": {"change_pct": 0.0},
+                "^TNX": {"change_pct": 0.0},
+                "^VIX": {"change_pct": 0.0},
+            },
+            "structured_drivers": {"cftc": {"position_signal": "🟢 一致看多"}},
+            "upcoming_macro_events": [],
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(votes["做多"], [])
+        self.assertEqual(len(votes["做空"]), 1)
+        self.assertIn("CFTC/仓位", votes["做空"][0])
+
+    def test_us_equity_market_etfs_count_as_one_dimension(self) -> None:
+        mod = load_module(
+            "us_equity_analyze_dimension_gate",
+            ROOT / "skills" / "us-equity-market-analysis" / "scripts" / "us_equity_analyze.py",
+        )
+        rows = ohlc_rows(40, step=1.0)
+        data = {
+            "symbol": "AAPL",
+            "instrument_type": "stock",
+            "daily_90d": rows,
+            "agg_4h_10d": rows,
+            "hourly_10d": rows,
+            "proxies": {
+                "^VIX": {"price": 15.0, "change_pct": 0.0},
+                "^TNX": {"change_pct": 0.0},
+                "SPY": {"change_pct": 0.8},
+                "QQQ": {"change_pct": 0.9},
+            },
+            "company_event_proxy": {"events": [
+                {"type": "business_proxy", "title": "Apple product launch"},
+            ]},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(len(votes["做多"]), 3)
+        self.assertEqual(mod.direction_from_evidence(data, votes), "做多")
+        self.assertEqual(sum("市场/ETF" in item for item in votes["做多"]), 1)
+        self.assertEqual(sum("公司事件" in item for item in votes["做多"]), 1)
+
+    def test_futures_technical_pattern_is_one_dimension(self) -> None:
+        mod = load_module(
+            "futures_analyze_dimension_gate",
+            ROOT / "skills" / "futures-market-analysis" / "scripts" / "futures_analyze.py",
+        )
+        rows = ohlc_rows(40, step=1.0)
+        data = {
+            "symbol": "HG",
+            "proxies": {
+                "DX-Y.NYB": {"change_pct": -0.6},
+            },
+            "structured_drivers": {},
+        }
+
+        votes = mod.directional_evidence(data, rows, rows)
+        self.assertEqual(len(votes["做多"]), 2)
+        self.assertEqual(mod.direction_from_evidence(data, rows, rows, votes), "观望")
+
+    def test_futures_fundamental_headlines_are_one_dimension(self) -> None:
+        mod = load_module(
+            "futures_analyze_fundamental_dimension",
+            ROOT / "skills" / "futures-market-analysis" / "scripts" / "futures_analyze.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "symbol": "CL",
+            "proxies": {
+                "DX-Y.NYB": {"change_pct": 0.0},
+                "^OVX": {"price": 35.0, "change_pct": 0.0},
+            },
+            "structured_drivers": {"eia": {"available": True}},
+            "news": [
+                {"title": "Oil rises as inventory draw points to tighter supply"},
+                {"title": "Crude gains after OPEC cut fuels supply fears"},
+            ],
+        }
+
+        votes = mod.directional_evidence(data, rows, rows)
+        self.assertEqual(len(votes["做多"]), 1)
+        self.assertIn("供需/库存/事件", votes["做多"][0])
+        self.assertEqual(mod.direction_from_evidence(data, rows, rows, votes), "观望")
+
+    def test_futures_eia_availability_without_inventory_delta_is_neutral(self) -> None:
+        mod = load_module(
+            "futures_analyze_eia_neutral",
+            ROOT / "skills" / "futures-market-analysis" / "scripts" / "futures_analyze.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "symbol": "CL",
+            "proxies": {
+                "DX-Y.NYB": {"change_pct": 0.0},
+                "^OVX": {"price": 35.0, "change_pct": 0.0},
+            },
+            "structured_drivers": {"eia": {"available": True}},
+            "news": [],
+        }
+
+        votes = mod.directional_evidence(data, rows, rows)
+        self.assertEqual(votes["做多"], [])
+        self.assertEqual(votes["做空"], [])
+        self.assertTrue(any("EIA页面可用" in item for item in votes["neutral"]))
+
 
 if __name__ == "__main__":
     unittest.main()

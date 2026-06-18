@@ -306,6 +306,161 @@ def _proxy_price(data: Dict[str, Any], name: str) -> float | None:
         return None
 
 
+def _futures_dimension(reason: str) -> str:
+    if reason.startswith("技术结构") or "主导手法" in reason:
+        return "技术结构"
+    if reason.startswith(("DXY", "美债收益率", "10Y")):
+        return "宏观/利率美元"
+    if reason.startswith(("OVX", "VIX")):
+        return "波动率/情绪"
+    if reason.startswith("可执行永续"):
+        return "可执行合约层"
+    if reason.startswith(("供需/库存", "地缘/OPEC", "天气/库存", "中国需求/库存")):
+        return "供需/库存/事件"
+    if reason.startswith("CFTC"):
+        return "CFTC/仓位"
+    return "其他"
+
+
+def _headline_signal(symbol: str, title: str) -> str | None:
+    text = title.lower()
+    energy_bullish = [
+        "inventory draw",
+        "inventories draw",
+        "stockpile draw",
+        "stockpiles draw",
+        "drawdown",
+        "supply disruption",
+        "supply risk",
+        "supply fears",
+        "sanctions",
+        "opec cut",
+        "output cut",
+        "geopolitical tension",
+        "middle east tension",
+    ]
+    energy_bearish = [
+        "inventory build",
+        "inventories build",
+        "stockpile build",
+        "stockpiles build",
+        "surplus",
+        "oversupply",
+        "output hike",
+        "output increase",
+        "demand weak",
+        "demand worries",
+        "ceasefire",
+    ]
+    gas_bullish = [
+        "storage draw",
+        "inventory draw",
+        "cold weather",
+        "heat wave",
+        "lng exports rise",
+        "supply disruption",
+    ]
+    gas_bearish = [
+        "storage build",
+        "inventory build",
+        "mild weather",
+        "production rises",
+        "production hits record",
+        "oversupply",
+    ]
+    copper_bullish = [
+        "china stimulus",
+        "china demand",
+        "mine disruption",
+        "supply disruption",
+        "inventory draw",
+        "stockpile draw",
+    ]
+    copper_bearish = [
+        "china demand weak",
+        "demand concerns",
+        "inventory build",
+        "stockpile build",
+        "surplus",
+        "tariff",
+    ]
+    precious_bullish = [
+        "safe-haven demand",
+        "geopolitical tension",
+        "rate cut bets",
+        "dollar weakens",
+    ]
+    precious_bearish = [
+        "dollar strengthens",
+        "yields rise",
+        "rate hike bets",
+        "safe-haven demand fades",
+    ]
+
+    if symbol in {"CL", "BZ"}:
+        bullish, bearish = energy_bullish, energy_bearish
+    elif symbol == "NG":
+        bullish, bearish = gas_bullish, gas_bearish
+    elif symbol == "HG":
+        bullish, bearish = copper_bullish, copper_bearish
+    elif symbol in {"GC", "SI", "PL", "PA"}:
+        bullish, bearish = precious_bullish, precious_bearish
+    else:
+        return None
+
+    has_bullish = any(token in text for token in bullish)
+    has_bearish = any(token in text for token in bearish)
+    if has_bullish and not has_bearish:
+        return "做多"
+    if has_bearish and not has_bullish:
+        return "做空"
+    if has_bullish and has_bearish:
+        return "neutral"
+    return None
+
+
+def _dimensionize_votes(votes: Dict[str, List[str]], classifier) -> Dict[str, List[str]]:
+    buckets: Dict[str, Dict[str, List[str]]] = {}
+    for side in ("做多", "做空"):
+        for reason in votes.get(side, []):
+            bucket = classifier(reason)
+            buckets.setdefault(bucket, {"做多": [], "做空": []})[side].append(reason)
+
+    collapsed: Dict[str, Any] = {
+        "做多": [],
+        "做空": [],
+        "neutral": list(votes.get("neutral", [])),
+        "veto": [],
+        "veto_long": list(votes.get("veto_long", [])),
+        "veto_short": list(votes.get("veto_short", [])),
+        "dimensions": {},
+    }
+    for reason in votes.get("veto", []):
+        if "禁止追多" in reason:
+            collapsed["veto_long"].append(reason)
+        elif "禁止追空" in reason:
+            collapsed["veto_short"].append(reason)
+        else:
+            collapsed["veto"].append(reason)
+
+    for name, sides in buckets.items():
+        long_reasons = sides["做多"]
+        short_reasons = sides["做空"]
+        if long_reasons and not short_reasons:
+            reason = "；".join(long_reasons)
+            collapsed["做多"].append(f"{name}: {reason}")
+            collapsed["dimensions"][name] = {"stance": "做多", "reasons": long_reasons}
+        elif short_reasons and not long_reasons:
+            reason = "；".join(short_reasons)
+            collapsed["做空"].append(f"{name}: {reason}")
+            collapsed["dimensions"][name] = {"stance": "做空", "reasons": short_reasons}
+        else:
+            reason = "多空内部冲突：多(" + "；".join(long_reasons) + ") / 空(" + "；".join(short_reasons) + ")"
+            collapsed["neutral"].append(f"{name}: {reason}")
+            collapsed["dimensions"][name] = {"stance": "中性", "reasons": long_reasons + short_reasons}
+    return collapsed
+
+
 def directional_evidence(data: Dict[str, Any], daily: List[Dict[str, Any]], h4: List[Dict[str, Any]]) -> Dict[str, List[str]]:
     """Build conservative direction evidence from multiple independent dimensions."""
 
@@ -389,7 +544,53 @@ def directional_evidence(data: Dict[str, Any], daily: List[Dict[str, Any]], h4: 
         elif ratio <= 0.4:
             votes["veto"].append(f"{key}={ratio:.2f} 空头拥挤，禁止追空")
 
-    return votes
+    cftc_signal = str(data.get("structured_drivers", {}).get("cftc", {}).get("position_signal", ""))
+    if cftc_signal:
+        if "极度看多" in cftc_signal:
+            votes.setdefault("veto_long", []).append(f"CFTC {cftc_signal}，多头拥挤")
+        elif "极度看空" in cftc_signal:
+            votes.setdefault("veto_short", []).append(f"CFTC {cftc_signal}，空头拥挤")
+        elif "看多" in cftc_signal or "偏多" in cftc_signal:
+            votes["做多"].append(f"CFTC {cftc_signal}")
+        elif "看空" in cftc_signal or "偏空" in cftc_signal:
+            votes["做空"].append(f"CFTC {cftc_signal}")
+
+    matched_fundamental_news = False
+    for item in data.get("news", [])[:6]:
+        title = str(item.get("title", ""))
+        signal = _headline_signal(symbol, title)
+        if signal == "做多":
+            matched_fundamental_news = True
+            if symbol in {"CL", "BZ"}:
+                votes["做多"].append(f"地缘/OPEC/库存偏多：{title}")
+            elif symbol == "NG":
+                votes["做多"].append(f"天气/库存偏多：{title}")
+            elif symbol == "HG":
+                votes["做多"].append(f"中国需求/库存偏多：{title}")
+            else:
+                votes["做多"].append(f"供需/库存偏多：{title}")
+        elif signal == "做空":
+            matched_fundamental_news = True
+            if symbol in {"CL", "BZ"}:
+                votes["做空"].append(f"地缘/OPEC/库存偏空：{title}")
+            elif symbol == "NG":
+                votes["做空"].append(f"天气/库存偏空：{title}")
+            elif symbol == "HG":
+                votes["做空"].append(f"中国需求/库存偏空：{title}")
+            else:
+                votes["做空"].append(f"供需/库存偏空：{title}")
+        elif signal == "neutral":
+            matched_fundamental_news = True
+            votes["neutral"].append(f"供需/库存标题多空混合：{title}")
+
+    if symbol in {"CL", "NG"} and not matched_fundamental_news:
+        eia = data.get("structured_drivers", {}).get("eia", {})
+        if eia.get("available"):
+            votes["neutral"].append("EIA页面可用，但库存增减未结构化，供需维度不参与定向")
+        else:
+            votes["neutral"].append("EIA库存块缺失或不可用，供需维度不参与定向")
+
+    return _dimensionize_votes(votes, _futures_dimension)
 
 
 def direction_from_evidence(
@@ -403,19 +604,21 @@ def direction_from_evidence(
         return "观望"
     long_count = len(votes["做多"])
     short_count = len(votes["做空"])
-    if long_count >= 4 and long_count - short_count >= 2:
+    if long_count >= 3 and long_count - short_count >= 2 and not votes.get("veto_long"):
         return "做多"
-    if short_count >= 4 and short_count - long_count >= 2:
+    if short_count >= 3 and short_count - long_count >= 2 and not votes.get("veto_short"):
         return "做空"
     return "观望"
 
 
 def direction_quality_text(votes: Dict[str, List[str]]) -> str:
     return (
-        f"多头证据 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
-        f"空头证据 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"多头独立维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"空头独立维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
         f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
-        f"硬性降级：{'; '.join(votes['veto']) or '无'}"
+        f"硬性降级：{'; '.join(votes['veto']) or '无'}；"
+        f"禁止追多：{'; '.join(votes.get('veto_long', [])) or '无'}；"
+        f"禁止追空：{'; '.join(votes.get('veto_short', [])) or '无'}"
     )
 
 
@@ -424,6 +627,10 @@ def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str
     short_count = len(votes["做空"])
     if votes["veto"]:
         return "存在硬性降级项，最终方向降为观望"
+    if final_direction == "观望" and votes.get("veto_long") and long_count > short_count:
+        return "多头证据虽占优，但存在禁止追多项，最终观望"
+    if final_direction == "观望" and votes.get("veto_short") and short_count > long_count:
+        return "空头证据虽占优，但存在禁止追空项，最终观望"
     if final_direction == "做多":
         return "最强空头证据：" + ("；".join(votes["做空"]) if votes["做空"] else "无同等级反证")
     if final_direction == "做空":
@@ -432,7 +639,7 @@ def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str
         return "多空证据数量相同，方向质量不足，最终观望"
     if abs(long_count - short_count) < 2:
         return "多空证据差距小于 2 项，未通过方向质量门槛，最终观望"
-    return "同向证据少于 4 项，未形成可执行方向优势，最终观望"
+    return "同向维度少于 3 项，未形成可执行方向优势，最终观望"
 
 
 def driver_summary(data: Dict[str, Any]) -> str:
