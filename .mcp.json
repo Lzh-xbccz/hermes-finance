@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hermes-finance": {
+      "command": "python3",
+      "args": ["hermes_finance_mcp/server.py"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}

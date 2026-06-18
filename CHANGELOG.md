@@ -1,5 +1,49 @@
 # Changelog
 
+## v1.1.0 (2026-06-18) — Skills + MCP 双版本架构
+
+### 新增
+
+- 新增 `hermes_finance/` 共享核心 API：
+  - `route_market`
+  - `fetch_market_data`
+  - `analyze_market`
+  - `czsc_analyze`
+- 新增 `hermes_finance_mcp/server.py`，提供 MCP stdio server。
+- 新增 MCP tools：
+  - `route_market_tool`
+  - `fetch_market_data_tool`
+  - `analyze_market_tool`
+  - `analyze_crypto`
+  - `analyze_futures`
+  - `analyze_forex`
+  - `analyze_us_equity`
+  - `analyze_a_share`
+  - `czsc_analyze_tool`
+- 新增 MCP resources：
+  - `finance://routing`
+  - `finance://framework/{market}`
+- 新增 MCP prompts：
+  - `deep_market_analysis`
+  - `czsc_confirmation_review`
+- 新增 `.mcp.json` 客户端配置示例。
+- 新增 `requirements-mcp.txt`，MCP 依赖作为可选安装。
+- 新增 `docs/USAGE.md`，覆盖安装、CLI、Skills、MCP、功能、排错与验证。
+- 新增 `tests/test_core.py`，覆盖路由和核心服务基础行为。
+
+### 改进
+
+- `scripts/market_analyze.py` 改成共享核心薄封装，兼容旧 CLI 入口。
+- `skills/multi-market-analysis/scripts/route_market.py` 改成共享路由薄封装，避免路由规则双份漂移。
+- `skills/multi-market-analysis/SKILL.md` 增加 Skills/MCP 双入口说明。
+- `install.sh` 支持 `INSTALL_MCP=1` 安装 MCP 可选依赖。
+
+### 验证
+
+- `python3 -m unittest discover -s tests -v`
+- `python3 -m compileall -q hermes_finance hermes_finance_mcp scripts skills/multi-market-analysis/scripts tests`
+- MCP stdio client smoke：列出 tools/resources/prompts，调用 `route_market_tool` 和 `analyze_crypto`。
+
 ## v1.0.3 (2026-06-17) — 缠论深度分析增强
 
 ### 🆕 新增（源自 czsc_skills by zengbin93）

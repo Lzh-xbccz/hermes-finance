@@ -12,6 +12,11 @@ pip install --break-system-packages git+https://github.com/waditu/czsc.git
 pip install --break-system-packages ccxt pandas plotly
 pip install --break-system-packages baostock akshare pydantic-settings rich python-dotenv
 
+if [ "${INSTALL_MCP:-0}" = "1" ]; then
+    echo "🔌 安装 MCP 可选依赖..."
+    pip install --break-system-packages -r requirements-mcp.txt
+fi
+
 echo "✅ 验证安装..."
 python3 -c "import czsc; print(f'czsc {czsc.__version__}')"
 python3 -c "from czsc.connectors.ccxt_connector import get_raw_bars; print('get_raw_bars ✅')"
@@ -25,3 +30,6 @@ python3 -c "from czsc.signals import cxt_first_buy_V221126; print('czsc.signals 
 echo ""
 echo "🚀 安装完成！试试:"
 echo "  python scripts/czsc_analyze.py BTCUSDT 4h --signals"
+echo "  python -m hermes_finance route BTC"
+echo ""
+echo "🔌 如需 MCP：INSTALL_MCP=1 bash install.sh 或 pip install -r requirements-mcp.txt"
