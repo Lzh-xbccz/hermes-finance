@@ -5,6 +5,7 @@
 用法:
   python3 market_analyze.py crypto bitcoin
   python3 market_analyze.py crypto ethereum
+  python3 market_analyze.py crypto bitcoin --with-czsc
   python3 market_analyze.py a-share                    # 大盘
   python3 market_analyze.py a-share --stock 600519     # 个股
   python3 market_analyze.py futures CL                 # 原油
@@ -46,19 +47,39 @@ def run_script(cmd, timeout=120):
         return ""
 
 
-def fetch_crypto(symbol, blocks="all"):
+def _crypto_market_symbol(symbol: str) -> str:
+    script = MARKET_SCRIPTS["crypto"]
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("crypto_fetch_data", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.market_symbol(symbol)
+
+
+def fetch_crypto(symbol, blocks="all", with_czsc=False):
     """加密货币数据拉取"""
     script = MARKET_SCRIPTS["crypto"]
     if not os.path.exists(script):
         print(f"❌ 脚本不存在: {script}")
         sys.exit(1)
     
-    print(f"🔄 拉取 {symbol} 数据 (blocks={blocks})...", file=sys.stderr)
+    print(f"🔄 拉取 {symbol} 多维数据 (blocks={blocks})...", file=sys.stderr)
     output = run_script(["python3", script, symbol, blocks])
     if output:
+        print("## 多维数据块（1-7维主体）")
         print(output)
     else:
         print(f"❌ 无数据返回")
+
+    if with_czsc:
+        czsc_script = os.path.join(_PROJECT_ROOT, "scripts", "czsc_analyze.py")
+        czsc_symbol = _crypto_market_symbol(symbol)
+        print(f"🔄 拉取 {czsc_symbol} 缠论结构（第8维确认，不是最终结论）...", file=sys.stderr)
+        czsc_output = run_script(["python3", czsc_script, czsc_symbol, "--freqs", "4h,15m", "--report"], timeout=180)
+        if czsc_output:
+            print("\n## 缠论结构（第8维技术确认）")
+            print("> 注意：本段只用于确认/否决/降级 1-7 维主判断，不能单独作为最终方向。")
+            print(czsc_output)
 
 
 def fetch_ashare(stock=None, remote=None):
@@ -169,6 +190,7 @@ def main():
     parser.add_argument("market", choices=["crypto", "a-share", "futures", "forex", "us-equity"])
     parser.add_argument("symbol", nargs="?", default=None, help="标的代码")
     parser.add_argument("--blocks", default="all", help="crypto数据块")
+    parser.add_argument("--with-czsc", action="store_true", help="crypto同时输出缠论第8维确认")
     parser.add_argument("--stock", default=None, help="A股个股代码")
     parser.add_argument("--remote", default=None, help="A股远程节点")
     parser.add_argument("--no-news", action="store_true", help="不搜索新闻")
@@ -183,7 +205,7 @@ def main():
         if not args.symbol:
             print("❌ crypto 需要指定币种，如: bitcoin, ethereum")
             sys.exit(1)
-        fetch_crypto(args.symbol, args.blocks)
+        fetch_crypto(args.symbol, args.blocks, with_czsc=args.with_czsc)
 
     elif args.market == "a-share":
         fetch_ashare(stock=args.stock or args.symbol, remote=args.remote)
