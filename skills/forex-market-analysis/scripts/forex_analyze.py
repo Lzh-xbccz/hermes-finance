@@ -177,6 +177,143 @@ def direction(data: Dict[str, Any]) -> str:
     return "观望"
 
 
+def _proxy_change(data: Dict[str, Any], name: str) -> float | None:
+    value = data.get("proxies", {}).get(name, {}).get("change_pct")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _event_delta_hours(event: Dict[str, Any]) -> float | None:
+    raw = str(event.get("delta_hours", "")).removesuffix("h")
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def directional_evidence(data: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Build conservative evidence for the requested FX pair itself."""
+
+    votes: Dict[str, List[str]] = {"做多": [], "做空": [], "veto": [], "neutral": []}
+    technical = direction(data)
+    if technical in {"做多", "做空"}:
+        votes[technical].append(f"技术结构={technical}")
+
+    pattern = classify_pattern(data.get("agg_4h_10d", []))
+    if pattern == "趋势推进":
+        votes["做多"].append("4H主导手法=趋势推进")
+    elif pattern in {"冲高派发", "阴跌磨人"}:
+        votes["做空"].append(f"4H主导手法={pattern}")
+    elif pattern in {"箱体洗盘", "跌破回收"}:
+        votes["neutral"].append(f"4H主导手法={pattern}")
+
+    symbol = data["symbol"]
+    dxy_chg = _proxy_change(data, "DX-Y.NYB")
+    tnx_chg = _proxy_change(data, "^TNX")
+    vix_chg = _proxy_change(data, "^VIX")
+    rates = data.get("structured_drivers", {}).get("rates", {})
+    diff_signal = str(rates.get("diff_signal", ""))
+
+    usd_base = symbol.startswith("USD") or symbol == "DXY"
+    usd_quote = symbol.endswith("USD") and not usd_base
+
+    def usd_strength_vote(reason: str) -> None:
+        if usd_base:
+            votes["做多"].append(reason)
+        elif usd_quote:
+            votes["做空"].append(reason)
+        else:
+            votes["neutral"].append(reason)
+
+    def usd_weakness_vote(reason: str) -> None:
+        if usd_base:
+            votes["做空"].append(reason)
+        elif usd_quote:
+            votes["做多"].append(reason)
+        else:
+            votes["neutral"].append(reason)
+
+    if dxy_chg is not None:
+        if dxy_chg > 0.20:
+            usd_strength_vote(f"DXY走强 {dxy_chg:+.2f}%")
+        elif dxy_chg < -0.20:
+            usd_weakness_vote(f"DXY走弱 {dxy_chg:+.2f}%")
+
+    if tnx_chg is not None:
+        if tnx_chg > 0.30:
+            usd_strength_vote(f"10Y上行 {tnx_chg:+.2f}%")
+        elif tnx_chg < -0.30:
+            usd_weakness_vote(f"10Y下行 {tnx_chg:+.2f}%")
+
+    if "USD利差优势" in diff_signal:
+        usd_strength_vote(diff_signal)
+    elif "USD利差劣势" in diff_signal:
+        usd_weakness_vote(diff_signal)
+
+    if symbol in {"USDJPY", "USDCHF"} and vix_chg is not None:
+        if vix_chg > 5:
+            votes["做空"].append(f"VIX上升 {vix_chg:+.2f}% 支持避险货币")
+        elif vix_chg < -5:
+            votes["做多"].append(f"VIX下降 {vix_chg:+.2f}% 压低避险需求")
+
+    if symbol in {"AUDUSD", "NZDUSD"} and vix_chg is not None:
+        if vix_chg > 5:
+            votes["做空"].append(f"VIX上升 {vix_chg:+.2f}% 压制风险货币")
+        elif vix_chg < -5:
+            votes["做多"].append(f"VIX下降 {vix_chg:+.2f}% 支撑风险货币")
+
+    events = data.get("upcoming_macro_events") or []
+    high_impact_near = []
+    for event in events:
+        delta = _event_delta_hours(event)
+        if event.get("impact") == "High" and delta is not None and -1 <= delta <= 2:
+            high_impact_near.append(event)
+    if high_impact_near:
+        votes["veto"].append("高影响宏观数据窗口过近，禁止硬给方向")
+
+    return votes
+
+
+def direction_from_evidence(data: Dict[str, Any], votes: Dict[str, List[str]] | None = None) -> str:
+    votes = votes or directional_evidence(data)
+    if votes["veto"]:
+        return "观望"
+    long_count = len(votes["做多"])
+    short_count = len(votes["做空"])
+    if long_count >= 4 and long_count - short_count >= 2:
+        return "做多"
+    if short_count >= 4 and short_count - long_count >= 2:
+        return "做空"
+    return "观望"
+
+
+def direction_quality_text(votes: Dict[str, List[str]]) -> str:
+    return (
+        f"多头证据 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"空头证据 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
+        f"硬性降级：{'; '.join(votes['veto']) or '无'}"
+    )
+
+
+def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str:
+    long_count = len(votes["做多"])
+    short_count = len(votes["做空"])
+    if votes["veto"]:
+        return "存在硬性降级项，最终方向降为观望"
+    if final_direction == "做多":
+        return "最强空头证据：" + ("；".join(votes["做空"]) if votes["做空"] else "无同等级反证")
+    if final_direction == "做空":
+        return "最强多头证据：" + ("；".join(votes["做多"]) if votes["做多"] else "无同等级反证")
+    if long_count == short_count:
+        return "多空证据数量相同，方向质量不足，最终观望"
+    if abs(long_count - short_count) < 2:
+        return "多空证据差距小于 2 项，未通过方向质量门槛，最终观望"
+    return "同向证据少于 4 项，未形成可执行方向优势，最终观望"
+
+
 def macro_summary(data: Dict[str, Any]) -> str:
     """宏观代理摘要：DXY + VIX + 利率曲线 + 利差信号"""
     proxies = data.get("proxies", {})
@@ -292,7 +429,8 @@ def build_report(data: Dict[str, Any]) -> str:
     daily = data["daily_90d"]
     h4 = data["agg_4h_10d"]
     h1 = data["hourly_10d"]
-    side = direction(data)
+    votes = directional_evidence(data)
+    side = direction_from_evidence(data, votes)
     pattern = classify_pattern(h4)
     today = classify_today(h1[-24:] if len(h1) >= 24 else h1)
     actions = recent_key_actions(h4)
@@ -335,6 +473,8 @@ def build_report(data: Dict[str, Any]) -> str:
         f"**数据完整性**：{completeness}",
         "**宏观时效性**：外汇近 24 小时连续交易；央行/数据窗口前后 headline 权重高于图形",
         f"**主导宏观因子**：{macro_summary(data)}",
+        f"**方向质量门槛**：{direction_quality_text(votes)}",
+        f"**反向审计**：{counter_audit_text(side, votes)}",
         "",
         "### 历史轨迹复盘",
         f"- 最近 `30D 4H` 主导手法：{pattern}",
@@ -357,7 +497,7 @@ def build_report(data: Dict[str, Any]) -> str:
         f"- 主导叙事：{'日银/干预风险' if data['symbol'] == 'USDJPY' else '人民币管理风险' if data['symbol'] == 'USDCNH' else '美元与央行路径'}",
         f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
         "",
-        "### 六维判断",
+        "### 七维主判断",
         f"- 技术面：当前价 {last:.5f}，4H 结构为主",
         "- 市场结构：看 5s10s 利差、对手国利差、美元方向与风险偏好",
         f"- 主导力量：{macro_summary(data)}；{cftc_summary(data)}；{macro_event_summary(data)}",

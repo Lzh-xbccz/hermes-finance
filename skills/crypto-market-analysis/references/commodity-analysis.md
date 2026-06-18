@@ -1,7 +1,7 @@
 # 商品期货分析适配 (Commodity Adaptation)
 
 > 当用户要求分析原油(CL)、黄金(GC)、天然气(NG)等商品期货时使用。
-> 核心思路沿用 crypto-market-analysis 的因果拆解和多维交叉验证，但商品期货必须使用 futures-market-analysis 的六维框架，数据源和指标完全替换。
+> 核心思路沿用 crypto-market-analysis 的因果拆解和多维交叉验证，但商品期货必须使用 futures-market-analysis 的七维主判断 + 第八维 CZSC 确认框架，数据源和指标完全替换。
 
 ## 数据源映射
 

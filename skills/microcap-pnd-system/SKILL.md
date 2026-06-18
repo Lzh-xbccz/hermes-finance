@@ -1,8 +1,8 @@
 ---
 name: microcap-pnd-system
 description: "极端山寨P&D交易系统 v3.0 — 全自动深度分析。一次扫描完成发现+基本面+合约+垃圾币过滤+量价诊断+综合评分+交易建议。检测器/追踪器/退出信号器/鲸鱼监控四件套。"
-version: 3.1.0
 metadata:
+  version: 3.1.0
   hermes:
     tags: [microcap, altcoin, pump-and-dump, PnD, meme, forensic, backtest, exit-strategy, deep-analysis]
     related_skills: [crypto-market-analysis]
@@ -10,7 +10,7 @@ metadata:
 
 # 极端山寨P&D交易系统 v3.1
 
-> ⛔ 铁律：你不是在写行情播报，你是在做法医解剖。每句话必须回答"为什么"。禁止"可能""或许""值得关注"。每个数据必须有对比基准。每个判断必须有因果链。
+> ⛔ 铁律：你不是在写行情播报，你是在做证据审计。每个方向判断必须回答"为什么"，并先做反向审计。允许使用"证据不足"、"方向未确认"、"观望"；禁止在证据冲突时硬给做多/做空。
 
 > **核心认知：86%的极端山寨最终崩盘>50%。赚钱靠的不是选对币，是在崩之前跑掉。**
 > **铁则：每次分析必须全维度，禁止只给价格就建议入场。泵幅>50%自动降级。**

@@ -192,6 +192,132 @@ def direction(data: Dict[str, Any]) -> str:
     return "观望"
 
 
+def _proxy_change(data: Dict[str, Any], name: str) -> float | None:
+    value = data.get("proxies", {}).get(name, {}).get("change_pct")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _proxy_price(data: Dict[str, Any], name: str) -> float | None:
+    value = data.get("proxies", {}).get(name, {}).get("price")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def directional_evidence(data: Dict[str, Any]) -> Dict[str, List[str]]:
+    votes: Dict[str, List[str]] = {"做多": [], "做空": [], "veto": [], "neutral": []}
+    technical = direction(data)
+    if technical in {"做多", "做空", "偏多", "偏空"}:
+        normalized = "做多" if technical in {"做多", "偏多"} else "做空"
+        votes[normalized].append(f"技术结构={technical}")
+
+    pattern = classify_pattern(data.get("agg_4h_10d") or data.get("daily_90d", []))
+    if pattern == "趋势推进":
+        votes["做多"].append("主导手法=趋势推进")
+    elif pattern in {"冲高派发", "阴跌磨人"}:
+        votes["做空"].append(f"主导手法={pattern}")
+    elif pattern in {"箱体洗盘", "跌破回收"}:
+        votes["neutral"].append(f"主导手法={pattern}")
+
+    vix_price = _proxy_price(data, "^VIX")
+    vix_chg = _proxy_change(data, "^VIX")
+    tnx_chg = _proxy_change(data, "^TNX")
+    spy_chg = _proxy_change(data, "SPY")
+    qqq_chg = _proxy_change(data, "QQQ")
+
+    if vix_price is not None and vix_price >= 25:
+        votes["veto"].append(f"VIX={vix_price:.2f} 偏高，方向质量不足")
+    if vix_chg is not None:
+        if vix_chg > 5:
+            votes["做空"].append(f"VIX上升 {vix_chg:+.2f}%")
+        elif vix_chg < -5:
+            votes["做多"].append(f"VIX下降 {vix_chg:+.2f}%")
+    if tnx_chg is not None:
+        if tnx_chg > 0.50:
+            votes["做空"].append(f"10Y上行 {tnx_chg:+.2f}% 压制权益久期")
+        elif tnx_chg < -0.50:
+            votes["做多"].append(f"10Y下行 {tnx_chg:+.2f}% 支撑估值")
+    for name, chg in {"SPY": spy_chg, "QQQ": qqq_chg}.items():
+        if chg is None:
+            continue
+        if chg > 0.50:
+            votes["做多"].append(f"{name}上涨 {chg:+.2f}%")
+        elif chg < -0.50:
+            votes["做空"].append(f"{name}下跌 {chg:+.2f}%")
+
+    if data.get("instrument_type") == "stock":
+        events = data.get("company_event_proxy", {}).get("events", [])
+        if not events:
+            votes["veto"].append("个股公司事件代理缺失，禁止硬给方向")
+        for event in events[:5]:
+            event_type = event.get("type")
+            title = str(event.get("title", "")).lower()
+            if event_type == "earnings_proxy":
+                if any(token in title for token in ["miss", "cuts", "lower", "weak", "falls"]):
+                    votes["做空"].append(f"公司事件偏空：{event.get('title')}")
+                elif any(token in title for token in ["beat", "raise", "strong", "growth"]):
+                    votes["做多"].append(f"公司事件偏多：{event.get('title')}")
+                else:
+                    votes["neutral"].append(f"公司事件未定向：{event.get('title')}")
+            elif event_type == "regulatory_proxy":
+                votes["做空"].append(f"监管/诉讼风险：{event.get('title')}")
+
+    return votes
+
+
+def _neutral_direction(data: Dict[str, Any]) -> str:
+    return "震荡" if data.get("instrument_type") == "index" else "观望"
+
+
+def direction_from_evidence(data: Dict[str, Any], votes: Dict[str, List[str]] | None = None) -> str:
+    votes = votes or directional_evidence(data)
+    if votes["veto"]:
+        return _neutral_direction(data)
+    long_count = len(votes["做多"])
+    short_count = len(votes["做空"])
+    if data.get("instrument_type") == "index":
+        if long_count >= 4 and long_count - short_count >= 2:
+            return "偏多"
+        if short_count >= 4 and short_count - long_count >= 2:
+            return "偏空"
+        return "震荡"
+    if long_count >= 4 and long_count - short_count >= 2:
+        return "做多"
+    if short_count >= 4 and short_count - long_count >= 2:
+        return "做空"
+    return _neutral_direction(data)
+
+
+def direction_quality_text(votes: Dict[str, List[str]]) -> str:
+    return (
+        f"多头证据 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"空头证据 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
+        f"硬性降级：{'; '.join(votes['veto']) or '无'}"
+    )
+
+
+def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str:
+    long_count = len(votes["做多"])
+    short_count = len(votes["做空"])
+    neutral_label = "震荡" if final_direction == "震荡" else "观望"
+    if votes["veto"]:
+        return f"存在硬性降级项，最终方向降为{neutral_label}"
+    if final_direction in {"做多", "偏多"}:
+        return "最强空头证据：" + ("；".join(votes["做空"]) if votes["做空"] else "无同等级反证")
+    if final_direction in {"做空", "偏空"}:
+        return "最强多头证据：" + ("；".join(votes["做多"]) if votes["做多"] else "无同等级反证")
+    if long_count == short_count:
+        return f"多空证据数量相同，方向质量不足，最终{neutral_label}"
+    if abs(long_count - short_count) < 2:
+        return f"多空证据差距小于 2 项，未通过方向质量门槛，最终{neutral_label}"
+    return f"同向证据少于 4 项，未形成可执行方向优势，最终{neutral_label}"
+
+
 def driver_summary(data: Dict[str, Any]) -> str:
     proxies = data.get("proxies", {})
     parts = []
@@ -225,7 +351,8 @@ def build_report(data: Dict[str, Any]) -> str:
     daily = data["daily_90d"]
     h4 = data["agg_4h_10d"]
     h1 = data["hourly_10d"]
-    side = direction(data)
+    votes = directional_evidence(data)
+    side = direction_from_evidence(data, votes)
     pattern = classify_pattern(h4) if h4 else "数据不足"
     today = classify_today(h1[-24:] if len(h1) >= 24 else h1) if h1 else "数据不足"
     actions = recent_key_actions(h4 or daily)
@@ -235,10 +362,8 @@ def build_report(data: Dict[str, Any]) -> str:
     resistance = levels["resistance"]
     last = (h1[-1]["close"] if h1 else daily[-1]["close"]) if daily else 0.0
     gaps = key_block_gaps(data)
-    if data["instrument_type"] == "index" and gaps:
-        side = "震荡"
-    elif gaps or structure["stance"] == "结构模糊":
-        side = "观望"
+    if gaps or structure["stance"] == "结构模糊":
+        side = _neutral_direction(data)
     completeness_parts = []
     if gaps:
         completeness_parts.append("关键缺口：" + "、".join(gaps))
@@ -253,6 +378,8 @@ def build_report(data: Dict[str, Any]) -> str:
             f"**数据完整性**：{completeness}",
             "**宏观时效性**：若处于美股常规时段外，现金指数与 ETF 联动仅作背景过滤",
             f"**主导因子**：{driver_summary(data)}",
+            f"**方向质量门槛**：{direction_quality_text(votes)}",
+            f"**反向审计**：{counter_audit_text(side, votes)}",
             "",
             "### 历史轨迹复盘",
             f"- 最近主导手法：{pattern}",
@@ -271,7 +398,7 @@ def build_report(data: Dict[str, Any]) -> str:
             "- 主导叙事：现金指数默认以风险偏好和利率环境解读",
             f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
             "",
-            "### 六维判断",
+            "### 七维主判断",
             f"- 技术面：当前价 {last:.2f}",
             "- 市场结构：用指数与 ETF 交叉看风险偏好",
             "- 主导力量：以利率、权重股和大盘广度为主",
@@ -307,6 +434,8 @@ def build_report(data: Dict[str, Any]) -> str:
             f"**数据完整性**：{completeness}",
             "**宏观时效性**：若处于盘前/盘后，个股与ETF价格波动仅作弱确认，常规时段信号优先",
             f"**市场背景**：{driver_summary(data)}",
+            f"**方向质量门槛**：{direction_quality_text(votes)}",
+            f"**反向审计**：{counter_audit_text(side, votes)}",
             "",
             "### 历史轨迹复盘",
             f"- 最近 `30D 4H` 主导手法：{pattern}",
@@ -326,7 +455,7 @@ def build_report(data: Dict[str, Any]) -> str:
             "- 主导叙事：公司事件、行业主线和利率敏感性",
             f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
             "",
-            "### 六维判断",
+            "### 七维主判断",
             f"- 技术面：当前价 {last:.2f}",
             "- 市场结构：看 ETF、行业轮动和盘前盘后风险",
             f"- 主导力量：公司事件、行业主线和利率敏感性；{company_event_summary(data)}",

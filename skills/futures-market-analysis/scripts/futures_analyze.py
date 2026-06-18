@@ -290,6 +290,151 @@ def price_bias(daily: List[Dict[str, Any]], hourly4: List[Dict[str, Any]]) -> st
     return "观望"
 
 
+def _proxy_change(data: Dict[str, Any], name: str) -> float | None:
+    value = data.get("proxies", {}).get(name, {}).get("change_pct")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _proxy_price(data: Dict[str, Any], name: str) -> float | None:
+    value = data.get("proxies", {}).get(name, {}).get("price")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def directional_evidence(data: Dict[str, Any], daily: List[Dict[str, Any]], h4: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Build conservative direction evidence from multiple independent dimensions."""
+
+    symbol = data["symbol"]
+    votes: Dict[str, List[str]] = {"做多": [], "做空": [], "veto": [], "neutral": []}
+
+    tech = price_bias(daily, h4)
+    if tech in {"做多", "做空"}:
+        votes[tech].append(f"技术结构={tech}")
+
+    pattern = classify_pattern(h4)
+    if pattern == "趋势推进":
+        votes["做多"].append("4H主导手法=趋势推进")
+    elif pattern in {"冲高派发", "阴跌磨人"}:
+        votes["做空"].append(f"4H主导手法={pattern}")
+    elif pattern in {"箱体洗盘", "跌破回收"}:
+        votes["neutral"].append(f"4H主导手法={pattern}")
+
+    dxy_chg = _proxy_change(data, "DX-Y.NYB")
+    tnx_chg = _proxy_change(data, "^TNX")
+    vix_chg = _proxy_change(data, "^VIX")
+    vix_price = _proxy_price(data, "^VIX")
+    ovx_chg = _proxy_change(data, "^OVX")
+    ovx_price = _proxy_price(data, "^OVX")
+
+    commodity_symbols = {"CL", "BZ", "GC", "SI", "HG", "NG", "PL", "PA"}
+    precious_symbols = {"GC", "SI", "PL", "PA"}
+    index_symbols = {"ES", "NQ", "YM", "RTY"}
+
+    if symbol in commodity_symbols and dxy_chg is not None:
+        if dxy_chg > 0.25:
+            votes["做空"].append(f"DXY走强 {dxy_chg:+.2f}% 压制商品")
+        elif dxy_chg < -0.25:
+            votes["做多"].append(f"DXY走弱 {dxy_chg:+.2f}% 支撑商品")
+
+    if symbol in precious_symbols and tnx_chg is not None:
+        if tnx_chg > 0.30:
+            votes["做空"].append(f"美债收益率上行 {tnx_chg:+.2f}% 压制贵金属")
+        elif tnx_chg < -0.30:
+            votes["做多"].append(f"美债收益率下行 {tnx_chg:+.2f}% 支撑贵金属")
+
+    if symbol in {"CL", "BZ"}:
+        if ovx_price is not None and ovx_price >= 60:
+            votes["veto"].append(f"OVX={ovx_price:.2f} 处于高波动/事件风险区，禁止硬给方向")
+        if ovx_chg is not None:
+            if ovx_chg > 5:
+                votes["做空"].append(f"OVX上升 {ovx_chg:+.2f}% 风险定价未解除")
+            elif ovx_chg < -5:
+                votes["做多"].append(f"OVX下降 {ovx_chg:+.2f}% 恐慌消退")
+
+    if symbol in index_symbols:
+        if vix_price is not None and vix_price >= 25:
+            votes["veto"].append(f"VIX={vix_price:.2f} 偏高，股指方向质量不足")
+        if vix_chg is not None:
+            if vix_chg > 5:
+                votes["做空"].append(f"VIX上升 {vix_chg:+.2f}% 风险偏好恶化")
+            elif vix_chg < -5:
+                votes["做多"].append(f"VIX下降 {vix_chg:+.2f}% 风险偏好修复")
+        if symbol == "NQ" and tnx_chg is not None and tnx_chg > 0.50:
+            votes["做空"].append(f"10Y上行 {tnx_chg:+.2f}% 压制久期资产")
+
+    block = binance_tradfi_block(data)
+    summary = block.get("summary", {}) if block.get("available") else {}
+    try:
+        perp_chg = float(summary.get("price_change_pct_24h"))
+    except (TypeError, ValueError):
+        perp_chg = None
+    if perp_chg is not None:
+        if perp_chg > 1.0:
+            votes["做多"].append(f"可执行永续24h上涨 {perp_chg:+.2f}%")
+        elif perp_chg < -1.0:
+            votes["做空"].append(f"可执行永续24h下跌 {perp_chg:+.2f}%")
+
+    for key in ("latest_top_account_long_short_ratio", "latest_top_position_long_short_ratio"):
+        try:
+            ratio = float(summary.get(key))
+        except (TypeError, ValueError):
+            continue
+        if ratio >= 3:
+            votes["veto"].append(f"{key}={ratio:.2f} 多头拥挤，禁止追多")
+        elif ratio <= 0.4:
+            votes["veto"].append(f"{key}={ratio:.2f} 空头拥挤，禁止追空")
+
+    return votes
+
+
+def direction_from_evidence(
+    data: Dict[str, Any],
+    daily: List[Dict[str, Any]],
+    h4: List[Dict[str, Any]],
+    votes: Dict[str, List[str]] | None = None,
+) -> str:
+    votes = votes or directional_evidence(data, daily, h4)
+    if votes["veto"]:
+        return "观望"
+    long_count = len(votes["做多"])
+    short_count = len(votes["做空"])
+    if long_count >= 4 and long_count - short_count >= 2:
+        return "做多"
+    if short_count >= 4 and short_count - long_count >= 2:
+        return "做空"
+    return "观望"
+
+
+def direction_quality_text(votes: Dict[str, List[str]]) -> str:
+    return (
+        f"多头证据 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"空头证据 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
+        f"硬性降级：{'; '.join(votes['veto']) or '无'}"
+    )
+
+
+def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str:
+    long_count = len(votes["做多"])
+    short_count = len(votes["做空"])
+    if votes["veto"]:
+        return "存在硬性降级项，最终方向降为观望"
+    if final_direction == "做多":
+        return "最强空头证据：" + ("；".join(votes["做空"]) if votes["做空"] else "无同等级反证")
+    if final_direction == "做空":
+        return "最强多头证据：" + ("；".join(votes["做多"]) if votes["做多"] else "无同等级反证")
+    if long_count == short_count:
+        return "多空证据数量相同，方向质量不足，最终观望"
+    if abs(long_count - short_count) < 2:
+        return "多空证据差距小于 2 项，未通过方向质量门槛，最终观望"
+    return "同向证据少于 4 项，未形成可执行方向优势，最终观望"
+
+
 def driver_summary(data: Dict[str, Any]) -> str:
     symbol = data["symbol"]
     proxies = data.get("proxies", {})
@@ -437,7 +582,8 @@ def build_report(data: Dict[str, Any]) -> str:
             "以上分析基于公开数据，不构成投资建议。",
         ]
         return "\n".join(lines)
-    direction = price_bias(daily, h4)
+    votes = directional_evidence(data, daily, h4)
+    direction = direction_from_evidence(data, daily, h4, votes)
     pattern = classify_pattern(h4)
     today = classify_today(h1[-24:] if len(h1) >= 24 else h1)
     actions = recent_key_actions(h4)
@@ -482,6 +628,8 @@ def build_report(data: Dict[str, Any]) -> str:
         "**宏观时效性**：24h 期货/代理市场按抓取时点视作近实时，重大事件窗口需额外降权技术面",
         f"**K线主源**：{row_basis['source']}",
         f"**主导驱动**：{driver_summary(data)}",
+        f"**方向质量门槛**：{direction_quality_text(votes)}",
+        f"**反向审计**：{counter_audit_text(direction, votes)}",
         "",
         "### 历史轨迹复盘",
         f"- 最近 `30D 4H` 主导手法：{pattern}",
@@ -502,7 +650,7 @@ def build_report(data: Dict[str, Any]) -> str:
         f"- 情绪代理：{'OVX/VIX 未见异常缺口' if any(k in data.get('proxies', {}) for k in ['^OVX', '^VIX']) else '波动率代理不足'}",
         f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
         "",
-        "### 六维判断",
+        "### 七维主判断",
         f"- 技术面：当前价 {last:.2f}，4H 结构与最近摆点决定方向",
         f"- 市场结构：{market_structure_text(data, row_basis)}",
         f"- 主导力量：{driver_summary(data)}；{cftc_summary(data)}",

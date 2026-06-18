@@ -27,4 +27,4 @@ python3 -m unittest discover -s tests -v
 
 Keep raw market data, inference, missing source status, and risk notes separate.
 
-For every market analysis, never stop at a quick market summary. Use full data, run CZSC when available, then output all eight dimensions plus `七维主判断`, `缠论确认`, and `最终方向`.
+For every market analysis, never stop at a quick market summary. Use full data, run CZSC when available, then output all eight dimensions plus `七维主判断`, `方向质量门槛`, `反向审计`, `缠论确认`, and `最终方向`. Do not force `做多` / `做空`; mixed, stale, incomplete, or contradicted evidence must end as `观望`, `震荡`, or `无方向优势`.

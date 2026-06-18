@@ -22,10 +22,13 @@ SERVER_INSTRUCTIONS = (
     "dimension 8 technical confirmation rather than the primary decision layer. "
     "For every market, do not return a quick market summary: fetch full data, "
     "run CZSC when K-lines are available, then output eight dimensions, "
-    "seven-dimension main judgment, CZSC confirmation, final direction, "
-    "scenarios, and invalidation levels. If CZSC is unavailable for a market, "
+    "seven-dimension main judgment, direction quality gate, counter-direction "
+    "audit, CZSC confirmation, final direction, scenarios, and invalidation "
+    "levels. If CZSC is unavailable for a market, "
     "mark dimension 8 as insufficient and downgrade confidence. Never use CZSC "
-    "score alone as the final stance; dimensions 1-7 must define the main thesis first."
+    "score alone as the final stance; dimensions 1-7 must define the main thesis "
+    "first. Do not force a directional call: 观望/震荡/无方向优势 is the correct "
+    "final direction whenever evidence is mixed, stale, incomplete, or contradicted."
 )
 
 
@@ -162,11 +165,12 @@ def deep_market_analysis(market: str, symbol: str) -> str:
 1. Call route_market_tool if the market is ambiguous.
 2. Read finance://framework/{market} before writing the answer.
 3. Call analyze_market_tool with blocks="all" and with_czsc=true, or call the market-specific analyze_* tool.
-4. Do not write a compressed market summary. Output all eight dimensions in order, then "七维主判断", "缠论确认", "最终方向", scenarios, and invalidation conditions.
+4. Do not write a compressed market summary. Output all eight dimensions in order, then "七维主判断", "方向质量门槛", "反向审计", "缠论确认", "最终方向", scenarios, and invalidation conditions.
 5. For non-crypto markets, map unavailable crypto-native dimensions to the target market proxies in the Skill framework and mark missing evidence explicitly.
-6. Build "七维主判断" from dimensions 1-7 first, including dominant driver and counter-evidence. CZSC can confirm, conflict with, or downgrade that thesis, but cannot replace it.
-7. Separate raw data facts from inference.
-8. Produce a clear final stance. This is technical research, not investment advice.
+6. Build "七维主判断" from dimensions 1-7 first, including dominant driver and counter-evidence. Then apply a direction quality gate: only give 做多/做空 when one side has broad evidence support and no hard veto; otherwise output 观望/震荡/无方向优势.
+7. Run "反向审计" before final direction: test the strongest opposite thesis and downgrade if it is comparable.
+8. Separate raw data facts from inference.
+9. Produce a clear final stance, but do not force a trade. "No directional edge" is a valid final stance. This is technical research, not investment advice.
 """
 
 
@@ -184,6 +188,8 @@ Required procedure:
 Required output:
 - 数据完整性
 - 七维主判断
+- 方向质量门槛
+- 反向审计
 - 缠论确认
 - 最终方向
 - 因果叙事
@@ -198,7 +204,7 @@ Required output:
 - 情景推演
 - 交易计划和失效条件
 
-Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation. Never make CZSC score the main reason for the final stance.
+Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation. Never make CZSC score the main reason for the final stance. Do not force 做多/做空: if dimensions 1-7 are split, key evidence is missing, or the counter-direction audit is comparable, the final direction must be 观望/震荡/无方向优势.
 """
 
 
@@ -216,6 +222,8 @@ Required procedure:
 Required output:
 - 数据完整性
 - 七维主判断
+- 方向质量门槛
+- 反向审计
 - 缠论确认
 - 最终方向
 - 因果叙事
@@ -230,7 +238,7 @@ Required output:
 - 情景推演
 - 交易计划和失效条件
 
-Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation. Never make CZSC score the main reason for the final stance.
+Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation. Never make CZSC score the main reason for the final stance. If the seven dimensions are split or the counter-direction audit is comparable, final direction must be 观望 rather than a forced long/short.
 """
 
 

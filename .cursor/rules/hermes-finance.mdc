@@ -19,4 +19,4 @@ python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
 
 Read the relevant `skills/*/SKILL.md` framework before writing a final market view. Treat CZSC as confirmation, separate raw facts from inference, and state source failures.
 
-For every market analysis request, do not write a compressed summary. Fetch full data, run CZSC when available, and answer with the full eight dimensions plus `七维主判断`, `缠论确认`, and `最终方向`.
+For every market analysis request, do not write a compressed summary. Fetch full data, run CZSC when available, and answer with the full eight dimensions plus `七维主判断`, `方向质量门槛`, `反向审计`, `缠论确认`, and `最终方向`. Do not force `做多` / `做空`; mixed, stale, incomplete, or contradicted evidence must end as `观望`, `震荡`, or `无方向优势`.
