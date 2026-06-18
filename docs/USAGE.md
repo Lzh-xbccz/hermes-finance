@@ -79,7 +79,7 @@ python3 -m unittest discover -s tests -v
 
 - `BTC` 路由到 `crypto`
 - `600519` 路由到 `a_share`
-- crypto price 能输出近 30 日价格和实时行情
+- crypto price 能输出近 30 日价格和实时行情；这只是连通性验证，不是正式八维分析
 - tests 全部通过
 
 ## CLI 使用
@@ -96,8 +96,8 @@ python3 -m hermes_finance route AAPL
 ### 统一采集
 
 ```bash
-python3 -m hermes_finance fetch crypto BTC --blocks price
-python3 -m hermes_finance fetch crypto bitcoin --blocks price,contracts,macro
+python3 -m hermes_finance fetch crypto BTC --blocks all
+python3 -m hermes_finance fetch crypto bitcoin --blocks all
 python3 -m hermes_finance fetch futures GC
 python3 -m hermes_finance fetch futures CL
 python3 -m hermes_finance fetch forex EURUSD
@@ -113,7 +113,7 @@ python3 -m hermes_finance fetch a-share --stock 600519
 ### 统一分析
 
 ```bash
-python3 -m hermes_finance analyze crypto BTC --blocks price --no-czsc
+python3 -m hermes_finance analyze crypto BTC --blocks all
 python3 -m hermes_finance analyze futures GC
 python3 -m hermes_finance analyze forex EURUSD
 python3 -m hermes_finance analyze us-equity AAPL
@@ -123,9 +123,11 @@ python3 -m hermes_finance analyze a-share --stock 600519
 crypto 可以开启缠论确认：
 
 ```bash
-python3 -m hermes_finance analyze crypto BTC --blocks price --json
+python3 -m hermes_finance analyze crypto BTC --blocks all --json
 python3 scripts/market_analyze.py crypto bitcoin --with-czsc --markdown
 ```
+
+`--no-czsc` 只适合调试数据采集链路。正式 crypto 分析不能使用 `--no-czsc`，否则第 8 维缺失，输出必须降级为“不足/不可用”。
 
 ### 缠论 CZSC
 
@@ -385,6 +387,8 @@ pip install --break-system-packages --force-reinstall git+https://github.com/wad
 ```bash
 python3 -m hermes_finance fetch crypto BTC --blocks price
 ```
+
+这个命令只用于快速确认 Binance price block 可用；正式分析请使用 `python3 -m hermes_finance analyze crypto BTC --blocks all`。
 
 ### A股远程节点不可用
 

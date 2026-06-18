@@ -1,9 +1,9 @@
 ---
 name: crypto-market-analysis
 description: "加密货币深度因果分析：七维因果+缠论结构，追涨跌根因+资金逻辑+庄家意图。自动触发czsc缠论分析。"
-version: 9.0.0
-author: 李小白吃菜猪 + Hermes
 metadata:
+  version: 9.0.0
+  author: 李小白吃菜猪 + Hermes
   hermes:
     tags: [crypto, bitcoin, ethereum, trading, causal-analysis, deep-research, czsc, chan-theory]
 ---

@@ -6,6 +6,10 @@
 
 - 加强 crypto 分析防呆：MCP 初始化 instructions、`deep_market_analysis` prompt、AGENTS/Claude/Gemini/Copilot/Cursor/Windsurf/Cline/Roo 规则都明确 BTC/ETH/SOL 必须走八维框架，避免 AI 工具输出压缩行情摘要。
 - 新增 MCP prompt `crypto_eight_dimension_analysis`，用于严格生成加密货币八维分析流程。
+- `analyze_market` 的 Markdown 输出新增 `Crypto Analysis Contract`，从工具返回层强制提示八维结构、七维主判断、缠论确认和最终方向。
+- AI 客户端规则中的 crypto 示例改为 `--blocks all` + 默认 CZSC，避免示例本身诱导快速摘要。
+- 修正 `multi-market-analysis` 总路由中的旧“统一六维”描述，明确 crypto 为八维框架，其他市场按各自目标框架。
+- 修正 `crypto-market-analysis` skill frontmatter，使其通过当前 skill validator。
 
 ## v1.1.1 (2026-06-18) — AI 客户端适配补强
 

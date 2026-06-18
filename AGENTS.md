@@ -12,12 +12,12 @@ Use this repository as a financial market data and analysis toolset.
 
 ```bash
 python3 -m hermes_finance route BTC
-python3 -m hermes_finance fetch crypto BTC --blocks price
+python3 -m hermes_finance fetch crypto BTC --blocks all
 python3 -m hermes_finance fetch futures GC
 python3 -m hermes_finance fetch forex EURUSD
 python3 -m hermes_finance fetch us-equity AAPL
 python3 -m hermes_finance fetch a-share --stock 600519
-python3 -m hermes_finance analyze crypto BTC --blocks price --no-czsc
+python3 -m hermes_finance analyze crypto BTC --blocks all
 python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
 ```
 

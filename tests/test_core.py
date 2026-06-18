@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from unittest import mock
 import unittest
 
 from hermes_finance.routing import classify, normalize_market
-from hermes_finance.service import crypto_pair_symbol, route_market
+from hermes_finance.formatters.markdown import format_market_result
+from hermes_finance.service import analyze_market, crypto_pair_symbol, route_market
 
 
 class RoutingTests(unittest.TestCase):
@@ -30,6 +32,50 @@ class ServiceTests(unittest.TestCase):
     def test_crypto_pair_symbol(self) -> None:
         self.assertEqual(crypto_pair_symbol("bitcoin"), "BTCUSDT")
         self.assertEqual(crypto_pair_symbol("ETHUSDT"), "ETHUSDT")
+
+    @mock.patch("hermes_finance.service.fetch_market_data")
+    @mock.patch("hermes_finance.service.czsc_analyze")
+    def test_crypto_analyze_runs_czsc_by_default(self, mock_czsc, mock_fetch) -> None:
+        mock_fetch.return_value = {
+            "ok": True,
+            "market": "crypto",
+            "symbol": "BTC",
+            "collector": "collector.py",
+            "data": None,
+            "output_text": "collector evidence",
+            "stderr": "",
+        }
+        mock_czsc.return_value = {
+            "ok": True,
+            "report_text": "czsc evidence",
+        }
+        result = analyze_market("crypto", "BTC")
+        mock_czsc.assert_called_once()
+        self.assertEqual(mock_czsc.call_args.args[0], "BTCUSDT")
+        self.assertIn("Crypto Analysis Contract", result["markdown"])
+
+
+class FormatterTests(unittest.TestCase):
+    def test_crypto_markdown_requires_eight_dimension_contract(self) -> None:
+        result = {
+            "market": "crypto",
+            "symbol": "BTC",
+            "fetch": {
+                "ok": True,
+                "collector": "skills/crypto-market-analysis/scripts/fetch_data.py",
+                "data": None,
+                "output_text": "collector evidence",
+                "stderr": "",
+            },
+            "czsc": {"ok": True, "report_text": "czsc evidence"},
+            "notes": [],
+        }
+        markdown = format_market_result(result)
+        self.assertIn("## Crypto Analysis Contract", markdown)
+        self.assertIn("七维主判断", markdown)
+        self.assertIn("缠论确认", markdown)
+        self.assertIn("八维深挖", markdown)
+        self.assertIn("Do not compress", markdown)
 
 
 if __name__ == "__main__":

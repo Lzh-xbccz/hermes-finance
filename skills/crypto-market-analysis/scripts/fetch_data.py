@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""加密货币六维数据采集脚本。用法: python3 fetch_data.py <coin_id> [blocks]
+"""加密货币八维分析数据采集脚本。用法: python3 fetch_data.py <coin_id> [blocks]
 blocks: all | price | klines | chain | contracts | sentiment | macro | exchanges | options
 多个block用逗号分隔，如: python3 fetch_data.py bitcoin price,contracts,macro
 

@@ -18,6 +18,8 @@ def format_market_result(result: dict[str, Any]) -> str:
         f"- CZSC: {_czsc_status(result.get('czsc'))}",
         "",
     ]
+    if result.get("market") == "crypto":
+        lines.extend(_crypto_analysis_contract(result))
     if fetch.get("stderr"):
         lines.extend(["## Collector Stderr", _clip(fetch["stderr"], 1500), ""])
     if isinstance(data, dict):
@@ -35,6 +37,38 @@ def format_market_result(result: dict[str, Any]) -> str:
         lines.append("## Notes")
         lines.extend(f"- {note}" for note in notes)
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _crypto_analysis_contract(result: dict[str, Any]) -> list[str]:
+    """Return the required synthesis contract for crypto analysis outputs."""
+
+    czsc = result.get("czsc")
+    if czsc is None:
+        czsc_line = "CZSC is missing. Do not produce a final strict crypto view until 4H+15m CZSC is run."
+    elif czsc.get("ok"):
+        czsc_line = "CZSC evidence is available. Use it only as dimension 8 confirmation."
+    else:
+        czsc_line = "CZSC failed. Mark dimension 8 as unavailable and downgrade final confidence."
+
+    return [
+        "## Crypto Analysis Contract",
+        "This is a crypto analysis result. Do not compress it into a quick price/contracts/macro summary.",
+        "",
+        "Before writing the final answer, synthesize the evidence into this exact structure:",
+        "",
+        "1. 数据完整性",
+        "2. 七维主判断（只基于 1-7 维，不允许用 CZSC 覆盖）",
+        "3. 缠论确认（第 8 维，只做确认/冲突/不足）",
+        "4. 最终方向",
+        "5. 因果叙事",
+        "6. 八维深挖：技术结构、链上真相、庄家博弈/合约结构、情绪反指、宏观驱动、交易所交叉验证、期权暗语、缠论结构",
+        "7. 情景推演（概率合计 100%）",
+        "8. 交易计划和失效条件",
+        "",
+        f"- Strictness: {czsc_line}",
+        "- Missing sections must be explicitly marked as unavailable; do not silently skip a dimension.",
+        "",
+    ]
 
 
 def _czsc_status(czsc: dict[str, Any] | None) -> str:

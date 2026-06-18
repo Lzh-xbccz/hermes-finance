@@ -295,15 +295,15 @@ pip install --break-system-packages -r requirements-mcp.txt
 # 共享路由
 python3 -m hermes_finance route BTC
 
-# 统一采集
-python3 -m hermes_finance fetch crypto BTC --blocks price
+# 统一采集（crypto 正式分析用 all；price 只适合连通性调试）
+python3 -m hermes_finance fetch crypto BTC --blocks all
 python3 -m hermes_finance fetch futures GC
 python3 -m hermes_finance fetch forex EURUSD
 python3 -m hermes_finance fetch us-equity AAPL
 python3 -m hermes_finance fetch a-share --stock 600519
 
-# 统一分析
-python3 -m hermes_finance analyze crypto BTC --blocks price --no-czsc
+# 统一分析（crypto 默认必须包含八维证据和 CZSC）
+python3 -m hermes_finance analyze crypto BTC --blocks all
 python3 scripts/market_analyze.py crypto bitcoin --with-czsc --markdown
 
 # 缠论分析

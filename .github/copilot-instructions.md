@@ -19,8 +19,8 @@ Useful commands:
 
 ```bash
 python3 -m hermes_finance route BTC
-python3 -m hermes_finance fetch crypto BTC --blocks price
-python3 -m hermes_finance analyze crypto BTC --blocks price --no-czsc
+python3 -m hermes_finance fetch crypto BTC --blocks all
+python3 -m hermes_finance analyze crypto BTC --blocks all
 python3 -m unittest discover -s tests -v
 ```
 
