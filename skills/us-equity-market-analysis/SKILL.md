@@ -1,14 +1,9 @@
 ---
 name: us-equity-market-analysis
-description: 美股个股、ETF 与主要现金指数的六维分析。多时间框架复盘 + 单一方向决策 + 结构锚定止盈止损。
-version: 7.0.0
-metadata:
-  hermes:
-    tags: [us-equity, stocks, etf, earnings-analysis, catalyst-calendar, macro-rates, technical-analysis, decision, stop-loss, take-profit]
-    related_skills: [a-share-market-analysis, earnings-analysis, earnings-preview, catalyst-calendar, macro-rates-monitor]
+description: 美股个股、ETF 与主要现金指数八维分析。多时间框架复盘 + 公司/行业/宏观主判断 + 第8维CZSC缠论确认 + 结构锚定止盈止损。
 ---
 
-# 美股六维分析全流程
+# 美股八维分析全流程
 
 > ⛔ 铁律：你不是在写行情播报，你是在做法医解剖。每句话必须回答"为什么"。禁止"可能""或许""值得关注"。每个数据必须有对比基准。每个判断必须有因果链。
 
@@ -33,16 +28,24 @@ metadata:
 
 ---
 
-## 二、六维框架
+## 二、八维框架
 
 | # | 维度 | 核心关注 |
 |---|------|---------|
-| 1 | 📈 技术面 | K线结构、支撑阻力、量价、缺口（日线→4H→1H） |
-| 2 | 🏗️ 市场结构 | 行业ETF资金流、SPY/QQQ/IWM广度、板块轮动 |
-| 3 | 🐋 主导力量 | 财报/指引/回购、机构配置、期权OI分布 |
-| 4 | 😱 情绪面 | VIX水平与趋势、Put/Call比、涨跌比率 |
-| 5 | 🌍 宏观面 | Fed政策、^TNX/^FVX收益率、DXY、经济数据 |
-| 6 | 🔍 交叉验证 | 同板块≥2只个股 + 行业ETF + 大盘ETF方向一致性 |
+| 1 | 📈 技术结构 | K线结构、支撑阻力、量价、缺口（日线→4H→1H） |
+| 2 | 🏗️ 市场/行业结构 | 行业ETF资金流、SPY/QQQ/IWM广度、板块轮动 |
+| 3 | 🐋 公司事件/主导力量 | 财报/指引/回购、机构配置、监管/业务事件 |
+| 4 | 😱 情绪与期权代理 | VIX水平与趋势、Put/Call代理、涨跌比率 |
+| 5 | 🌍 宏观利率 | Fed政策、^TNX/^FVX收益率、DXY、经济数据 |
+| 6 | 🔍 同业/ETF交叉验证 | 同板块≥2只个股 + 行业ETF + 大盘ETF方向一致性 |
+| 7 | 🧯 流动性与缺口风险 | 财报窗口、盘前盘后、隔夜缺口、成交质量 |
+| 8 | 🧭 缠论结构 | CZSC 中枢、笔、背驰、买卖点候补；只做确认/冲突/不足 |
+
+**强制输出规则**：
+1. 先给 `七维主判断`，只基于第 1-7 维。
+2. 再给 `缠论确认`，说明 CZSC 是确认、冲突还是不足。
+3. 个股财报/监管事件优先级高于缠论；CZSC 不能覆盖事件风险。
+4. 使用 `python3 -m hermes_finance analyze us-equity <TICKER>` 或 MCP `analyze_us_equity`，默认会尽量用采集器 K 线跑 CZSC。
 
 ---
 
@@ -150,13 +153,15 @@ python3 ~/.hermes/skills/research/us-equity-market-analysis/scripts/fetch_data.p
 - 30D主导手法：[趋势推进/箱体洗盘/冲高派发/跌破回收/阴跌磨人]
 - 今天更像：[延续/回踩/诱多/诱空]
 
-### 六维判断
+### 八维判断
 - 📈技术面：[趋势+形态+量价]
 - 🏗️市场结构：[板块ETF方向+广度]
 - 🐋主导力量：[财报+机构+期权OI]
 - 😱情绪面：[VIX+Put/Call]
 - 🌍宏观面：[收益率+Fed+DXY]
 - 🔍交叉验证：[同板块一致性]
+- 🧯流动性与缺口风险：[财报窗口/盘前盘后/隔夜缺口]
+- 🧭缠论结构：[CZSC 确认/冲突/不足 + 中枢/笔/背驰]
 
 ### 💰 交易计划
 | 项目 | 价位 | 结构依据 |

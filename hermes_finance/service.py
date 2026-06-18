@@ -9,6 +9,7 @@ from typing import Any
 from .paths import PROJECT_ROOT, project_path
 from .routing import classify, normalize_market
 from .runner import parse_json_output, run_python_script
+from .czsc_adapter import analyze_market_klines
 
 
 MARKET_SCRIPT = {
@@ -196,9 +197,15 @@ def analyze_market(
     if with_czsc and resolved_market == "crypto" and fetch.get("symbol"):
         czsc_symbol = crypto_pair_symbol(str(fetch["symbol"]))
         czsc = czsc_analyze(czsc_symbol, timeout=timeout)
+    elif with_czsc and resolved_market in {"futures", "forex", "us_equity", "a_share"} and isinstance(fetch.get("data"), dict):
+        czsc = analyze_market_klines(
+            fetch["data"],
+            market=str(resolved_market),
+            symbol=str(fetch.get("symbol") or stock or symbol or ""),
+        )
 
     result = {
-        "ok": bool(fetch.get("ok")) and (czsc is None or bool(czsc.get("ok"))),
+        "ok": _combined_ok(fetch, czsc),
         "market": resolved_market,
         "symbol": fetch.get("symbol"),
         "fetch": fetch,
@@ -210,6 +217,19 @@ def analyze_market(
 
     result["markdown"] = format_market_result(result)
     return result
+
+
+def _combined_ok(fetch: dict[str, Any], czsc: dict[str, Any] | None) -> bool:
+    if not fetch.get("ok"):
+        return False
+    if czsc is None:
+        return True
+    if czsc.get("ok"):
+        return True
+    # Non-crypto CZSC can be unavailable because a collector has only daily or
+    # insufficient bars. Keep the data fetch usable and force the formatter to
+    # mark dimension 8 as unavailable instead of failing the whole call.
+    return czsc.get("mode") == "collector_klines"
 
 
 def _collector_args(
@@ -265,7 +285,7 @@ def _analysis_notes(market: str | None, with_czsc: bool, czsc: dict[str, Any] | 
         "This output is for technical research and does not constitute investment advice.",
     ]
     if with_czsc and market != "crypto":
-        notes.append("CZSC confirmation currently runs only for crypto exchange pairs through the ccxt connector.")
+        notes.append("CZSC confirmation uses collector K-lines for non-crypto markets; if unavailable, mark dimension 8 as insufficient instead of skipping it.")
     if czsc and not czsc.get("ok"):
         notes.append("CZSC execution failed; use the collector data and mark the technical confirmation as unavailable.")
     return notes

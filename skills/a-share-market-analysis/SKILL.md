@@ -1,12 +1,6 @@
 ---
 name: a-share-market-analysis
-description: "中国A股行情分析：六维一体 + Sequoia-X 7策略量化选股 + baostock免费数据源。自动扫描全市场5200只A股，收盘后推送结果。"
-version: 3.0.0
-author: 李小白菜吃猪 + Hermes
-metadata:
-  hermes:
-    tags: [a-share, china, stock, macro-rates, dxy, fomc, catalyst, trading, technical-analysis, north-bound, sector-rotation, shanghai, shenzhen]
-    related_skills: [crypto-market-analysis, macro-rates-monitor, catalyst-calendar]
+description: "中国A股八维行情分析：技术、资金、市场结构、情绪、宏观、板块轮动、Sequoia量化信号 + 第8维CZSC缠论确认；支持指数、个股、本地/国内节点降级。"
 ---
 
 # 中国 A 股行情分析
@@ -44,16 +38,24 @@ python a_share_scanner.py --strategy turtle
 
 ---
 
-## 六维分析框架
+## 八维分析框架
 
 | # | 维度 | 核心关注 | 数据源 | 状态 |
 |---|------|---------|--------|------|
-| 1 | 📈 技术面 | K线趋势、量价关系、支撑阻力、形态 | 新浪 API + 腾讯 K 线 | ✅ |
+| 1 | 📈 技术结构 | K线趋势、量价关系、支撑阻力、形态 | 新浪 API + 腾讯 K 线 | ✅ |
 | 2 | 💰 资金面 | **北向资金**净流入/流出（A股独有） | 浏览器→东方财富网页 | 🐢 慢但可用 |
 | 3 | 📊 市场结构 | 涨跌家数、涨停跌停统计 | 浏览器→东方财富网页 | 🐢 慢但可用 |
-| 4 | 😱 情绪面 | 成交量对比、风险偏好 | 新浪 API + 腾讯 K 线 | ✅ |
-| 5 | 🌍 宏观面 | 美股联动、人民币汇率、政策要闻 | Yahoo Finance + 新浪/腾讯 + Google News RSS | ✅ |
+| 4 | 😱 情绪量能 | 成交量对比、风险偏好 | 新浪 API + 腾讯 K 线 | ✅ |
+| 5 | 🌍 宏观政策 | 美股联动、人民币汇率、政策要闻 | Yahoo Finance + 新浪/腾讯 + Google News RSS | ✅ |
 | 6 | 🔄 板块轮动 | 领涨/领跌板块、热点概念、龙头识别 | 东方财富板块流 + 雪球热股 | 🔴 海外严重受限 |
+| 7 | 🧮 量化/Sequoia | 7策略扫描、RPS、突破/洗盘/反包信号 | baostock + SQLite | ✅ |
+| 8 | 🧭 缠论结构 | CZSC 中枢、笔、背驰、买卖点候补 | 腾讯日线/个股K线 | 可用则跑 |
+
+**强制输出规则**：
+1. 先给 `七维主判断`，只基于第 1-7 维。
+2. 再给 `缠论确认`，说明 CZSC 是确认、冲突还是不足。
+3. A股受 T+1、涨跌停、政策与板块轮动约束，CZSC 不能覆盖这些限制。
+4. 使用 `python3 -m hermes_finance analyze a-share --stock <CODE>` 或 MCP `analyze_a_share`，默认会尽量用采集器 K 线跑 CZSC。
 
 > ⚠️ **海外服务器实测结果（2026-05-04 更新）**：
 > - ❌ 东方财富 API（push2/datacenter-web）：TLS 成功，nginx 返回 502（Geo-block）

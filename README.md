@@ -48,10 +48,10 @@ hermes-finance/
 │   └── localize_chart.py            # 图表中文化工具
 └── skills/                          # 8 个分析技能
     ├── crypto-market-analysis/      # 🟠 加密货币 — 八维分析
-    ├── futures-market-analysis/     # 🟡 商品期货 — 六维分析
-    ├── forex-market-analysis/       # 🔵 外汇 — 六维分析+利率差
-    ├── a-share-market-analysis/     # 🔴 A股 — 六维+量化选股(Sequoia-X)
-    ├── us-equity-market-analysis/   # 🟣 美股 — 六维分析
+    ├── futures-market-analysis/     # 🟡 商品期货 — 八维分析
+    ├── forex-market-analysis/       # 🔵 外汇 — 八维分析+利率差
+    ├── a-share-market-analysis/     # 🔴 A股 — 八维+量化选股(Sequoia-X)
+    ├── us-equity-market-analysis/   # 🟣 美股 — 八维分析
     ├── multi-market-analysis/       # 🔀 智能路由
     ├── czsc-ccxt-analysis/          # 🎯 缠论引擎（薄封装→主脚本）
     └── microcap-pnd-system/         # ⚠️ 极端山寨检测
@@ -66,11 +66,11 @@ hermes-finance/
 Skills 目录保留 8 个分析技能：
 
 - `multi-market-analysis`：跨市场总路由
-- `crypto-market-analysis`：加密货币七维因果 + 缠论确认
-- `futures-market-analysis`：商品/股指期货六维分析
-- `forex-market-analysis`：外汇六维 + 利率差
-- `a-share-market-analysis`：A股六维 + Sequoia-X 选股
-- `us-equity-market-analysis`：美股/ETF/指数分析
+- `crypto-market-analysis`：加密货币七维因果 + 第八维缠论确认
+- `futures-market-analysis`：商品/股指期货八维分析
+- `forex-market-analysis`：外汇八维 + 利率差
+- `a-share-market-analysis`：A股八维 + Sequoia-X 选股
+- `us-equity-market-analysis`：美股/ETF/指数八维分析
 - `czsc-ccxt-analysis`：缠论引擎
 - `microcap-pnd-system`：极端山寨/Pump & Dump 风险识别
 
@@ -107,7 +107,7 @@ MCP resources/prompts：
 ```bash
 python3 -m hermes_finance route BTC
 python3 -m hermes_finance fetch futures GC
-python3 scripts/market_analyze.py crypto bitcoin --with-czsc --markdown
+python3 scripts/market_analyze.py crypto bitcoin --markdown
 ```
 
 ### 4. AI 客户端适配
@@ -151,33 +151,37 @@ python3 scripts/render_ai_client_config.py codex
 | 7 | 流动性 | 深度 / 滑点 — 能安全进出吗？ |
 | 8 | **缠论结构** | **czsc 4H+15min — 中枢在哪？一二三买？** |
 
-### 2. 商品期货 — 六维分析 🟡
+### 2. 商品期货 — 八维分析 🟡
 
 覆盖 CL（WTI 原油）、BZ（Brent 原油）、GC（黄金）、SI（白银）、HG（铜）、NG（天然气）、PL（铂金）、PA（钯金）、ES/NQ/YM/RTY（股指期货）；商品线自动接入 Binance TradFi 永续 `CLUSDT`、`BZUSDT`、`XAUUSDT`、`XAGUSDT`、`COPPERUSDT`、`NATGASUSDT`、`XPTUSDT`、`XPDUSDT`：
 
 | 维度 | 数据源 |
 |------|--------|
 | 技术结构 | K线形态 + MACD + 布林 |
-| 宏观驱动 | DXY + 实际利率 + 美联储 |
-| 库存/供需 | EIA原油库存 / COMEX黄金持仓 |
-| 资金面 | **COT报告（CSV优先，HTML降级）** + OI变化 |
-| 跨市场 | 相关品种联动 |
-| 季节性 | 历史同期表现 |
+| 可执行合约层 | Binance TradFi 永续 K线 / OI / 资金费率 / 多空比 |
+| 传统期货结构 | EIA原油库存 / COMEX黄金持仓 / CFTC |
+| 主导力量 | OVX/VIX / ETF / DXY / COT |
+| 情绪/波动率 | OVX/VIX + 挤仓情绪 |
+| 宏观与事件 | DXY + 实际利率 + 美联储/OPEC/地缘 |
+| 交叉验证 | 相关品种联动 / ETF / 美债 / 现货代理 |
+| 缠论结构 | 采集器 K线转 CZSC，第8维只做确认/冲突/不足 |
 
 Binance TradFi 商品永续作为可执行 K 线、资金费率、OI、多空比层；Yahoo 近月代理、CFTC、EIA、OVX/DXY 继续作为传统期货和宏观验证层。
 
-### 3. 外汇 — 六维分析 + 利率差 🔵
+### 3. 外汇 — 八维分析 + 利率差 🔵
 
 覆盖 DXY、EURUSD、USDJPY、GBPUSD、AUDUSD：
 
 | 维度 | 数据源 |
 |------|--------|
-| 利率差 | **US 10Y/5Y 利差 + 对手国利率代理 + DXY 趋势** |
-| 经济数据 | NFP / CPI / PMI 驱动 + 央行事件日历 |
 | 技术结构 | K线 + 支撑阻力 |
+| 利率差 | **US 10Y/5Y 利差 + 对手国利率代理 + DXY 趋势** |
+| 央行/主导力量 | Fed/ECB/BoJ/BoE/RBA 政策路径 |
 | 情绪面 | VIX + risk-on / risk-off |
-| 资金面 | CFTC 金融期货持仓（CSV优先） |
-| 资本流 | 债市 + 股市资金方向 |
+| 经济数据 | NFP / CPI / PMI 驱动 + 央行事件日历 |
+| 交叉验证 | DXY / 美债 / 相关交叉盘 / 黄金原油 |
+| 仓位/CFTC | CFTC 金融期货持仓（CSV优先） |
+| 缠论结构 | 采集器 K线转 CZSC，第8维只做确认/冲突/不足 |
 
 ### 4. 缠论核心引擎 🎯
 
@@ -221,16 +225,18 @@ res = cxt_first_buy_V221126(c)
 | `600519` / `000001` | a-share-market-analysis |
 | `AAPL` / `SPY` | us-equity-market-analysis |
 
-### 6. A股 — 六维 + 量化选股 🔴
+### 6. A股 — 八维 + 量化选股 🔴
 
 | 维度 | 指标 |
 |------|------|
-| 技术面 | K线 + 均线 + MACD + KDJ |
+| 技术结构 | K线 + 均线 + MACD + KDJ |
 | 资金面 | 北向资金净流入（A 股独有） |
 | 市场结构 | 涨跌家数 / 涨停跌停统计 |
-| 情绪面 | 成交量对比 / 风险偏好 |
-| 宏观面 | PMI / 社融 / 利率 / 美股联动 |
+| 情绪量能 | 成交量对比 / 风险偏好 |
+| 宏观政策 | PMI / 社融 / 利率 / 美股联动 |
 | 板块轮动 | 行业资金流向 / 热点概念 |
+| 量化信号 | Sequoia-X 7策略 |
+| 缠论结构 | 腾讯日线/个股K线转 CZSC，第8维只做确认/冲突/不足 |
 
 🆕 **Sequoia-X 量化选股引擎** — 7 种策略 × 5200+ 只 A 股：
 
@@ -238,9 +244,9 @@ res = cxt_first_buy_V221126(c)
 - 海龟突破 / 均线放量 / 高窄旗形 / 涨停洗盘 / 跌停反包 / RPS 突破 / 定增回补
 - **v1.0.2 起 8 线程并行扫描**，收盘后 5 分钟出结果
 
-### 7. 美股 — 六维分析 🟣
+### 7. 美股 — 八维分析 🟣
 
-多时间框架技术分析 / 基本面 / 资金流 / 期权市场 / 板块轮动 / 宏观。
+多时间框架技术结构 / 市场行业结构 / 公司事件 / 情绪期权代理 / 宏观利率 / 同业ETF交叉验证 / 流动性缺口风险 / CZSC 缠论确认。
 
 ### 8. 极端山寨检测 ⚠️
 
@@ -304,9 +310,9 @@ python3 -m hermes_finance fetch forex EURUSD
 python3 -m hermes_finance fetch us-equity AAPL
 python3 -m hermes_finance fetch a-share --stock 600519
 
-# 统一分析（crypto 默认必须包含八维证据和 CZSC）
+# 统一分析（默认尽量包含八维证据和 CZSC）
 python3 -m hermes_finance analyze crypto BTC --blocks all
-python3 scripts/market_analyze.py crypto bitcoin --with-czsc --markdown
+python3 scripts/market_analyze.py crypto bitcoin --markdown
 
 # 缠论分析
 python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report

@@ -4,6 +4,10 @@
 
 ### 改进
 
+- 全市场分析契约升级为“尽可能八维”：futures/forex/us_equity/a_share 也要求 `七维主判断`、`缠论确认`、`最终方向`，CZSC 不可用时必须标注第 8 维不足并降级。
+- 新增 collector K-line CZSC 适配层，非 crypto 市场可直接用采集器返回的 Binance/Yahoo/Tencent K 线构造 CZSC，避免只支持 ccxt 交易对。
+- MCP `analyze_futures` / `analyze_forex` / `analyze_us_equity` / `analyze_a_share` 默认开启 CZSC，新增通用 `eight_dimension_analysis` prompt。
+- README、USAGE、AI 客户端规则和各市场 Skill 统一改为八维输出规则，避免 Claude Code/Codex/Cursor 等客户端继续产出六维摘要。
 - 期货/商品分析新增 Binance TradFi 商品永续层：`CLUSDT`、`BZUSDT`、`XAUUSDT`、`XAGUSDT`、`COPPERUSDT`、`NATGASUSDT`、`XPTUSDT`、`XPDUSDT`，采集 1H/4H/1D K线、24h ticker、mark/index、资金费率、OI、OI历史、多空账户/仓位比。
 - 共享路由和 service 识别 Binance TradFi 商品永续，避免 `CLUSDT` / `XAUUSDT` 因 `USDT` 被误路由到 crypto；CLI/MCP 可直接传这些符号并映射到 futures root。
 - futures skill 更新商品覆盖范围与 Binance TradFi 使用规则，黄金 PAXG 现货代理降级为 `XAUUSDT` 不可用时的最后兜底。
@@ -11,7 +15,7 @@
 - 新增 MCP prompt `crypto_eight_dimension_analysis`，用于严格生成加密货币八维分析流程。
 - `analyze_market` 的 Markdown 输出新增 `Crypto Analysis Contract`，从工具返回层强制提示八维结构、七维主判断、缠论确认和最终方向。
 - AI 客户端规则中的 crypto 示例改为 `--blocks all` + 默认 CZSC，避免示例本身诱导快速摘要。
-- 修正 `multi-market-analysis` 总路由中的旧“统一六维”描述，明确 crypto 为八维框架，其他市场按各自目标框架。
+- 修正 `multi-market-analysis` 总路由中的旧“统一六维”描述，明确所有市场尽可能走八维框架。
 - 修正 `crypto-market-analysis` skill frontmatter，使其通过当前 skill validator。
 
 ## v1.1.1 (2026-06-18) — AI 客户端适配补强

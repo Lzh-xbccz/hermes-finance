@@ -194,7 +194,7 @@ python3 ~/.hermes/scripts/microcap/pnd_whale.py 0x... --watch --interval 5
 | 链上数据 | 完整 | BSCScan鲸鱼 |
 | 期权 | Deribit | ❌无 |
 | 必查项 | 宏观/FOMC/VIX | 退市风险/垃圾币过滤 |
-| 分析深度 | 六维框架 | 十步自动分析 |
+| 分析深度 | 八维框架 | 十步自动分析 |
 
 ## 八、数据源优先级
 

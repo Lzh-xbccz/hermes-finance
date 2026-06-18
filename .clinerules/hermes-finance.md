@@ -8,8 +8,9 @@ Fallback commands:
 python3 -m hermes_finance route BTC
 python3 -m hermes_finance fetch crypto BTC --blocks all
 python3 -m hermes_finance analyze crypto BTC --blocks all
+python3 -m hermes_finance analyze futures CL
 ```
 
 For market analysis, read the matching `skills/*/SKILL.md` first and follow its dimensional framework. State source failures and separate facts from inference.
 
-For crypto analysis requests, especially BTC/ETH/SOL, always fetch all crypto blocks and run CZSC 4H+15m. The final answer must include all eight dimensions, `七维主判断`, `缠论确认`, and `最终方向`.
+For every market analysis request, fetch full data and run CZSC when K-lines are available. The final answer must include all eight dimensions, `七维主判断`, `缠论确认`, and `最终方向`.

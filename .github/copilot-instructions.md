@@ -21,9 +21,10 @@ Useful commands:
 python3 -m hermes_finance route BTC
 python3 -m hermes_finance fetch crypto BTC --blocks all
 python3 -m hermes_finance analyze crypto BTC --blocks all
+python3 -m hermes_finance analyze futures CL
 python3 -m unittest discover -s tests -v
 ```
 
 Keep raw market data, inference, missing source status, and risk notes separate.
 
-For BTC, ETH, SOL, and other crypto analysis, never stop at a quick market summary. Use `crypto` with `blocks=all`, run 4H+15m CZSC, then output all eight crypto dimensions plus `七维主判断`, `缠论确认`, and `最终方向`.
+For every market analysis, never stop at a quick market summary. Use full data, run CZSC when available, then output all eight dimensions plus `七维主判断`, `缠论确认`, and `最终方向`.

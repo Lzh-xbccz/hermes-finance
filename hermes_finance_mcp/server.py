@@ -19,11 +19,12 @@ SERVER_INSTRUCTIONS = (
     "A-shares, futures, forex, and US equities. Route ambiguous symbols first, "
     "read finance://framework/{market} before final analysis, keep raw facts "
     "separate from inference, report source_status/errors, and treat CZSC as "
-    "technical confirmation rather than standalone investment advice. For BTC, "
-    "ETH, SOL, and other crypto analysis requests, do not return a quick market "
-    "summary: fetch crypto blocks=all, run 4H+15m CZSC, then output the required "
-    "eight dimensions, seven-dimension main judgment, CZSC confirmation, final "
-    "direction, scenarios, and invalidation levels."
+    "dimension 8 technical confirmation rather than standalone investment advice. "
+    "For every market, do not return a quick market summary: fetch full data, "
+    "run CZSC when K-lines are available, then output eight dimensions, "
+    "seven-dimension main judgment, CZSC confirmation, final direction, "
+    "scenarios, and invalidation levels. If CZSC is unavailable for a market, "
+    "mark dimension 8 as insufficient and downgrade confidence."
 )
 
 
@@ -83,30 +84,30 @@ def analyze_crypto(symbol: str, blocks: str = "all", with_czsc: bool = True, tim
 
 @mcp.tool()
 def analyze_futures(symbol: str, timeout: int = 180) -> dict[str, Any]:
-    """Fetch futures or commodity market data."""
+    """Fetch futures or commodity market data and run collector-Kline CZSC when available."""
 
-    return analyze_market("futures", symbol, with_czsc=False, timeout=timeout)
+    return analyze_market("futures", symbol, with_czsc=True, timeout=timeout)
 
 
 @mcp.tool()
 def analyze_forex(symbol: str, timeout: int = 180) -> dict[str, Any]:
-    """Fetch foreign exchange market data."""
+    """Fetch foreign exchange market data and run collector-Kline CZSC when available."""
 
-    return analyze_market("forex", symbol, with_czsc=False, timeout=timeout)
+    return analyze_market("forex", symbol, with_czsc=True, timeout=timeout)
 
 
 @mcp.tool()
 def analyze_us_equity(symbol: str, timeout: int = 180) -> dict[str, Any]:
-    """Fetch US stock, ETF, or index data."""
+    """Fetch US stock, ETF, or index data and run collector-Kline CZSC when available."""
 
-    return analyze_market("us_equity", symbol, with_czsc=False, timeout=timeout)
+    return analyze_market("us_equity", symbol, with_czsc=True, timeout=timeout)
 
 
 @mcp.tool()
 def analyze_a_share(symbol: str | None = None, remote: str | None = None, timeout: int = 180) -> dict[str, Any]:
-    """Fetch A-share index or stock data."""
+    """Fetch A-share index or stock data and run collector-Kline CZSC when available."""
 
-    return analyze_market("a_share", symbol, with_czsc=False, remote=remote, timeout=timeout)
+    return analyze_market("a_share", symbol, with_czsc=True, remote=remote, timeout=timeout)
 
 
 @mcp.tool()
@@ -117,7 +118,7 @@ def czsc_analyze_tool(
     report: bool = True,
     timeout: int = 240,
 ) -> dict[str, Any]:
-    """Run CZSC multi-frequency technical analysis for a crypto exchange pair."""
+    """Run CZSC multi-frequency technical analysis for a ccxt exchange pair."""
 
     return czsc_analyze(symbol, freqs=freqs, chart=chart, report=report, timeout=timeout)
 
@@ -157,11 +158,43 @@ def deep_market_analysis(market: str, symbol: str) -> str:
 
 1. Call route_market_tool if the market is ambiguous.
 2. Read finance://framework/{market} before writing the answer.
-3. For crypto, call analyze_market_tool with blocks="all" and with_czsc=true, or call analyze_crypto with blocks="all".
-4. For crypto, do not write a compressed price/contracts/macro summary. Output all eight dimensions in order, then "七维主判断", "缠论确认", "最终方向", scenarios, and invalidation conditions.
-5. For other markets, follow the target Skill's dimensional framework.
+3. Call analyze_market_tool with blocks="all" and with_czsc=true, or call the market-specific analyze_* tool.
+4. Do not write a compressed market summary. Output all eight dimensions in order, then "七维主判断", "缠论确认", "最终方向", scenarios, and invalidation conditions.
+5. For non-crypto markets, map unavailable crypto-native dimensions to the target market proxies in the Skill framework and mark missing evidence explicitly.
 6. Separate raw data facts from inference.
 7. Produce a clear final stance. This is technical research, not investment advice.
+"""
+
+
+@mcp.prompt()
+def eight_dimension_analysis(market: str, symbol: str) -> str:
+    """Create a strict prompt for full eight-dimension analysis on any supported market."""
+
+    return f"""Use Hermes Finance to analyze {market} {symbol} with the strict eight-dimension framework.
+
+Required procedure:
+1. Call analyze_market_tool(market="{market}", symbol="{symbol}", blocks="all", with_czsc=true).
+2. Read finance://framework/{market} and follow the market-specific dimension mapping.
+3. If CZSC details are missing, stale, or unavailable, mark dimension 8 as 不足 and downgrade confidence. Do not silently skip it.
+
+Required output:
+- 数据完整性
+- 七维主判断
+- 缠论确认
+- 最终方向
+- 因果叙事
+- 1. 技术结构
+- 2. 市场专属结构/链上或替代层
+- 3. 主导资金/主导力量
+- 4. 情绪反指
+- 5. 宏观驱动
+- 6. 交叉验证
+- 7. 市场专属额外维度
+- 8. 缠论结构
+- 情景推演
+- 交易计划和失效条件
+
+Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation only; the seven-dimension main judgment must be produced before the CZSC confirmation.
 """
 
 

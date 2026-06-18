@@ -18,6 +18,7 @@ python3 -m hermes_finance fetch forex EURUSD
 python3 -m hermes_finance fetch us-equity AAPL
 python3 -m hermes_finance fetch a-share --stock 600519
 python3 -m hermes_finance analyze crypto BTC --blocks all
+python3 -m hermes_finance analyze futures CL
 python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
 ```
 
@@ -38,14 +39,15 @@ python3 scripts/czsc_analyze.py BTCUSDT --freqs 4h,15m --report
 - `finance://routing`
 - `finance://framework/{market}`
 - `deep_market_analysis`
+- `eight_dimension_analysis`
 - `czsc_confirmation_review`
 
 ## Rules
 
 - Use latest market data for live analysis.
 - Read the target market Skill framework before writing a final market view.
-- For BTC, ETH, SOL, and other crypto requests, do not give a quick summary. Run/fetch `crypto` with `--blocks all`, run 4H+15m CZSC, and output all eight crypto dimensions.
-- Crypto answers must include `七维主判断`, `缠论确认`, and `最终方向` in that order. CZSC cannot override dimensions 1-7.
+- For every market analysis request, do not give a quick summary. Fetch full market data, run CZSC when K-lines are available, and output all eight dimensions.
+- All market answers must include `七维主判断`, `缠论确认`, and `最终方向` in that order. CZSC cannot override dimensions 1-7; if unavailable, mark dimension 8 as insufficient.
 - Treat CZSC as technical confirmation, not as the only decision layer.
 - Separate raw facts from inference.
 - State missing data and source failures using `source_status` / `errors`.

@@ -1,12 +1,6 @@
 ---
 name: forex-market-analysis
-description: "外汇货币对与美元指数的六维分析。核心理念：利率路径与美元方向定大局，结构锚定止盈止损。说分析就分析，说方向给方向。"
-version: 5.0.0
-author: Nous Research + Hermes
-metadata:
-  hermes:
-    tags: [forex, fx, eurusd, usdjpy, macro-rates, yield-curve, dxy, fomc, catalyst, gbpusd, audusd, usdcnh, dxy, dollar-index, technical-analysis, central-bank, yield-spread, macro, news, day-trading, intraday, decision, stop-loss, take-profit]
-    related_skills: [crypto-market-analysis, macro-rates-monitor, catalyst-calendar]
+description: "外汇货币对与美元指数八维分析。利率路径与美元方向定大局，1-7维先形成主判断，第8维用CZSC缠论确认/冲突/不足，结构锚定止盈止损。"
 ---
 
 # 外汇货币对日内交易全流程
@@ -78,16 +72,24 @@ metadata:
 
 ---
 
-## 二、六维分析框架
+## 二、八维分析框架
 
 | # | 维度 | 核心关注 | 外汇对应项 |
 |---|------|---------|-----------|
-| 1 | 📈 技术面 | K线趋势、量价关系、支撑阻力、形态识别 | 多周期结构、波段节奏 |
-| 2 | ⛓️ 市场结构 | 利差预期、美元指数关系、避险/风险偏好结构 | 替代链上数据 |
-| 3 | 🏦 主导力量 | 央行路径、收益率差、美元强弱、政策预期 | 替代 OI/资金费率 |
-| 4 | 😱 情绪面 | VIX、避险流、市场 risk-on/risk-off | 替代恐惧贪婪指数 |
-| 5 | 🌍 宏观基本面 | CPI、NFP、GDP、PMI、央行会议、地缘 | 权重高于加密 |
+| 1 | 📈 技术结构 | K线趋势、支撑阻力、形态识别 | 多周期结构、波段节奏 |
+| 2 | ⛓️ 利差与美元结构 | 利差预期、DXY关系、避险/风险偏好结构 | 替代链上数据 |
+| 3 | 🏦 主导力量 | 央行路径、收益率差、政策预期 | 替代 OI/资金费率 |
+| 4 | 😱 情绪面 | VIX、避险流、risk-on/risk-off | 替代恐惧贪婪指数 |
+| 5 | 🌍 宏观基本面 | CPI、NFP、GDP、PMI、央行会议、地缘 | 权重高于技术面 |
 | 6 | 🔍 交叉验证 | DXY、美债收益率、相关交叉盘、黄金/原油 | 替代多交易所验证 |
+| 7 | 📊 仓位/CFTC | 杠杆基金、资产管理、美元指数持仓 | 外汇市场专属增强 |
+| 8 | 🧭 缠论结构 | CZSC 中枢、笔、背驰、买卖点候补 | 只做确认/冲突/不足 |
+
+**强制输出规则**：
+1. 先给 `七维主判断`，只基于第 1-7 维。
+2. 再给 `缠论确认`，说明 CZSC 是确认、冲突还是不足。
+3. 最终方向不能由缠论单独决定；与利率/央行路径冲突时必须降级。
+4. 使用 `python3 -m hermes_finance analyze forex <SYMBOL>` 或 MCP `analyze_forex`，默认会尽量用采集器 K 线跑 CZSC。
 
 ### 维度详解
 
@@ -169,7 +171,7 @@ metadata:
 
 ### 第二步：判断主导力量（央行/利率/美元方向）
 
-这是外汇六维中最重要的维度。按货币对优先级不同：
+这是外汇八维中第 3 维最重要的维度。按货币对优先级不同：
 
 | 货币对 | 第一驱动 | 第二驱动 | 第三驱动 |
 |--------|---------|---------|---------|
@@ -919,13 +921,15 @@ print('RATE PATH: Fed at 4.25-4.50%, market pricing ~85% hold')
 - CFTC / 市场持仓：[如有数据，杠杆基金偏多/偏空]
 - 本周高影响事件：[NFP Week / FOMC Week / CPI Week / 暂无]
 
-### 六维判断
+### 八维判断
 - 技术面：[多周期结构、关键位、形态]
-- 市场结构：[利差预期、DXY 方向、避险结构]
+- 利差与美元结构：[利差预期、DXY 方向、避险结构]
 - 主导力量：[央行路径 + 收益率差 + 美元强弱]
 - 情绪面：[VIX + risk-on/risk-off 判断]
 - 宏观面：[央行窗口期、核心数据、事件驱动]
 - 交叉验证：[DXY 一致/背离、相关货币对、黄金/原油]
+- 仓位/CFTC：[杠杆基金/资产管理净头寸]
+- 缠论结构：[CZSC 确认/冲突/不足 + 中枢/笔/背驰]
 
 ### 💰 止盈止损计划
 

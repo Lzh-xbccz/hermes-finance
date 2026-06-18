@@ -64,6 +64,28 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(mock_czsc.call_args.args[0], "BTCUSDT")
         self.assertIn("Crypto Analysis Contract", result["markdown"])
 
+    @mock.patch("hermes_finance.service.fetch_market_data")
+    @mock.patch("hermes_finance.service.analyze_market_klines")
+    def test_futures_analyze_runs_collector_kline_czsc_by_default(self, mock_czsc, mock_fetch) -> None:
+        mock_fetch.return_value = {
+            "ok": True,
+            "market": "futures",
+            "symbol": "CL",
+            "collector": "collector.py",
+            "data": {"symbol": "CL", "source_status": {"binance_tradfi_perp": "ok"}},
+            "output_text": "",
+            "stderr": "",
+        }
+        mock_czsc.return_value = {
+            "ok": True,
+            "mode": "collector_klines",
+            "report_text": "futures czsc evidence",
+        }
+        result = analyze_market("futures", "CL")
+        mock_czsc.assert_called_once()
+        self.assertEqual(mock_czsc.call_args.kwargs["market"], "futures")
+        self.assertIn("Eight-Dimension Analysis Contract", result["markdown"])
+
 
 class FormatterTests(unittest.TestCase):
     def test_crypto_markdown_requires_eight_dimension_contract(self) -> None:
@@ -86,6 +108,26 @@ class FormatterTests(unittest.TestCase):
         self.assertIn("缠论确认", markdown)
         self.assertIn("八维深挖", markdown)
         self.assertIn("Do not compress", markdown)
+
+    def test_futures_markdown_requires_eight_dimension_contract(self) -> None:
+        result = {
+            "market": "futures",
+            "symbol": "CL",
+            "fetch": {
+                "ok": True,
+                "collector": "skills/futures-market-analysis/scripts/futures_fetch.py",
+                "data": {"symbol": "CL", "source_status": {"binance_tradfi_perp": "ok"}},
+                "output_text": "",
+                "stderr": "",
+            },
+            "czsc": {"ok": True, "mode": "collector_klines", "report_text": "czsc evidence"},
+            "notes": [],
+        }
+        markdown = format_market_result(result)
+        self.assertIn("## Eight-Dimension Analysis Contract", markdown)
+        self.assertIn("可执行合约层/OI/资金费率", markdown)
+        self.assertIn("缠论确认", markdown)
+        self.assertIn("CZSC Report", markdown)
 
 
 if __name__ == "__main__":

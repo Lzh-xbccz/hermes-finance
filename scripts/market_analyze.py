@@ -25,7 +25,8 @@ def main() -> int:
     parser.add_argument("market", choices=["crypto", "a-share", "futures", "forex", "us-equity"])
     parser.add_argument("symbol", nargs="?", default=None, help="标的代码")
     parser.add_argument("--blocks", default="all", help="crypto 数据块: all 或逗号分隔列表")
-    parser.add_argument("--with-czsc", action="store_true", help="crypto 同时输出缠论第8维确认")
+    parser.add_argument("--with-czsc", action="store_true", help="兼容旧参数；Markdown 分析默认会尽量输出缠论第8维确认")
+    parser.add_argument("--no-czsc", action="store_true", help="仅调试采集链路时跳过缠论第8维")
     parser.add_argument("--stock", default=None, help="A股个股代码")
     parser.add_argument("--remote", default=None, help="A股远程节点")
     parser.add_argument("--timeout", type=int, default=240, help="采集超时秒数")
@@ -43,12 +44,13 @@ def main() -> int:
     print(f"市场: {args.market} | 标的: {target or '大盘'}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
-    if args.with_czsc or args.markdown:
+    should_analyze = args.with_czsc or args.markdown
+    if should_analyze:
         result = analyze_market(
             market,
             args.symbol,
             blocks=args.blocks,
-            with_czsc=args.with_czsc,
+            with_czsc=not args.no_czsc,
             stock=args.stock,
             remote=args.remote,
             timeout=args.timeout,

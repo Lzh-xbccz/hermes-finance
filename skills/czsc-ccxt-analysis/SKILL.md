@@ -1,8 +1,6 @@
 ---
 name: czsc-ccxt-analysis
 description: "缠论技术分析 — czsc官方全API，CCXT数据源，多级别联立，lightweight-charts可视化+自动Markdown报告。触发: 缠论/czsc/中枢/分型/笔"
-version: 4.0.0
-author: Hermes
 ---
 
 # 缠论技术分析 (czsc v4.0 — v1.0.0rc8 全API + lightweight-charts)

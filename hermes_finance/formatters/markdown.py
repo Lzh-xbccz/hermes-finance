@@ -18,8 +18,7 @@ def format_market_result(result: dict[str, Any]) -> str:
         f"- CZSC: {_czsc_status(result.get('czsc'))}",
         "",
     ]
-    if result.get("market") == "crypto":
-        lines.extend(_crypto_analysis_contract(result))
+    lines.extend(_analysis_contract(result))
     if fetch.get("stderr"):
         lines.extend(["## Collector Stderr", _clip(fetch["stderr"], 1500), ""])
     if isinstance(data, dict):
@@ -39,20 +38,23 @@ def format_market_result(result: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _crypto_analysis_contract(result: dict[str, Any]) -> list[str]:
-    """Return the required synthesis contract for crypto analysis outputs."""
+def _analysis_contract(result: dict[str, Any]) -> list[str]:
+    """Return the required synthesis contract for market analysis outputs."""
 
+    market = result.get("market")
     czsc = result.get("czsc")
     if czsc is None:
-        czsc_line = "CZSC is missing. Do not produce a final strict crypto view until 4H+15m CZSC is run."
+        czsc_line = "CZSC is missing. Mark dimension 8 as unavailable and downgrade confidence."
     elif czsc.get("ok"):
         czsc_line = "CZSC evidence is available. Use it only as dimension 8 confirmation."
     else:
         czsc_line = "CZSC failed. Mark dimension 8 as unavailable and downgrade final confidence."
+    dimensions = _dimension_names(str(market))
+    title = "Crypto Analysis Contract" if market == "crypto" else "Eight-Dimension Analysis Contract"
 
     return [
-        "## Crypto Analysis Contract",
-        "This is a crypto analysis result. Do not compress it into a quick price/contracts/macro summary.",
+        f"## {title}",
+        f"This is a {market} analysis result. Do not compress it into a quick market summary.",
         "",
         "Before writing the final answer, synthesize the evidence into this exact structure:",
         "",
@@ -61,14 +63,26 @@ def _crypto_analysis_contract(result: dict[str, Any]) -> list[str]:
         "3. 缠论确认（第 8 维，只做确认/冲突/不足）",
         "4. 最终方向",
         "5. 因果叙事",
-        "6. 八维深挖：技术结构、链上真相、庄家博弈/合约结构、情绪反指、宏观驱动、交易所交叉验证、期权暗语、缠论结构",
+        "6. 八维深挖：" + "、".join(dimensions),
         "7. 情景推演（概率合计 100%）",
         "8. 交易计划和失效条件",
         "",
         f"- Strictness: {czsc_line}",
+        "- For non-crypto markets, if a dimension has no direct equivalent, use the market-specific proxy and state the limitation.",
         "- Missing sections must be explicitly marked as unavailable; do not silently skip a dimension.",
         "",
     ]
+
+
+def _dimension_names(market: str) -> list[str]:
+    mapping = {
+        "crypto": ["技术结构", "链上真相", "庄家博弈/合约结构", "情绪反指", "宏观驱动", "交易所交叉验证", "期权暗语", "缠论结构"],
+        "futures": ["技术结构", "可执行合约层/OI/资金费率", "传统期货结构/CFTC/EIA", "主导力量", "情绪/波动率", "宏观与事件", "交叉验证", "缠论结构"],
+        "forex": ["技术结构", "利差与美元结构", "央行/主导力量", "风险情绪", "宏观事件", "交叉验证", "仓位/CFTC", "缠论结构"],
+        "us_equity": ["技术结构", "市场/行业结构", "公司事件/机构主导", "情绪与期权代理", "宏观利率", "同业/ETF交叉验证", "流动性与缺口风险", "缠论结构"],
+        "a_share": ["技术结构", "资金面/北向", "市场结构/涨跌家数", "情绪量能", "宏观政策", "板块轮动", "量化/Sequoia信号", "缠论结构"],
+    }
+    return mapping.get(market, mapping["crypto"])
 
 
 def _czsc_status(czsc: dict[str, Any] | None) -> str:
