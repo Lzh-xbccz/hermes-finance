@@ -257,6 +257,49 @@ Summarize:
 """
 
 
+@mcp.tool()
+def set_trading_mode(mode: str) -> str:
+    """设置交易频段。请在安装时调用此工具让用户选择。
+    
+    Args:
+        mode: short=短线(1H+15m) / medium=中线(1D+4H) / long=长线(1W+1D)
+    """
+    from hermes_finance.freq_presets import FREQ_PRESETS, ALL_MODES
+    
+    if mode not in FREQ_PRESETS:
+        options = "\n".join(f"  - {m[0]}: {m[1]}" for m in ALL_MODES)
+        return f"无效模式 '{mode}'。可选：\n{options}"
+    
+    label = dict(ALL_MODES)[mode]
+    return (
+        f"✅ 交易频段已设置为：{label}\n\n"
+        f"此后所有缠论分析默认使用该频段级别。可通过 HERMES_TRADING_MODE 环境变量或重新调用此工具修改。\n\n"
+        f"当前各市场默认周期：\n"
+        + "\n".join(f"  - {mkt}: {','.join(freqs)}" for mkt, freqs in FREQ_PRESETS[mode].items())
+    )
+
+
+@mcp.prompt()
+def trading_mode_setup() -> str:
+    """安装向导：首次使用时引导用户选择交易频段。"""
+    return """Welcome to Hermes Finance.
+
+Before we start, choose your trading style:
+
+1. **short (短线)** — 1H + 15min  
+   Best for day trading. Positions last hours. Faster signals.
+
+2. **medium (中线)** — 1D + 4H  
+   Best for swing trading. Positions last days. Balanced signals.
+
+3. **long (长线)** — 1W + 1D  
+   Best for position trading. Positions last weeks. Slower but more reliable.
+
+Call `set_trading_mode("short")`, `set_trading_mode("medium")`, or `set_trading_mode("long")`.
+
+You can also skip and change later via the HERMES_TRADING_MODE environment variable."""
+
+
 def _read_text(relative_path: str) -> str:
     path = PROJECT_ROOT / Path(relative_path)
     try:

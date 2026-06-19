@@ -6,12 +6,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-FREQ_ORDER = {"1d": 1, "4h": 2, "1h": 3, "15m": 4}
-DEFAULT_MARKET_FREQS = ["4h", "1d"]
-DEFAULT_FREQS_BY_MARKET = {
-    "futures": ["1h", "15m"],
-    "a_share": ["1d"],
-}
+FREQ_ORDER = {"1w": 0, "1d": 1, "4h": 2, "1h": 3, "15m": 4}
+DEFAULT_MARKET_FREQS = ["4h", "1d"]  # fallback only
+
+from .freq_presets import get_freqs as _get_preset_freqs
+
+
+def _default_freqs_for(market: str | None) -> list[str]:
+    """根据当前交易频段返回市场默认缠论周期。"""
+    return _get_preset_freqs(str(market or "crypto"))
 MIN_BARS = 20
 
 SIGNAL_DEFS = {
@@ -147,7 +150,7 @@ def _clean_rows(rows: Any) -> list[dict[str, Any]]:
 
 
 def _normalize_freqs(freqs: str | list[str] | None, *, market: str | None = None) -> list[str]:
-    default = DEFAULT_FREQS_BY_MARKET.get(str(market or ""), DEFAULT_MARKET_FREQS)
+    default = _default_freqs_for(market)
     if freqs is None:
         return default[:]
     raw = freqs.split(",") if isinstance(freqs, str) else freqs

@@ -10,6 +10,7 @@ from .paths import PROJECT_ROOT, project_path
 from .routing import classify, normalize_market
 from .runner import parse_json_output, run_python_script
 from .czsc_adapter import analyze_market_klines
+from .freq_presets import get_freqs, get_mode_label, TRADING_MODE, FREQ_PRESETS
 
 
 MARKET_SCRIPT = {
@@ -142,13 +143,17 @@ def fetch_market_data(
 def czsc_analyze(
     symbol: str,
     *,
-    freqs: str | list[str] = "1h,15m",
+    freqs: str | list[str] | None = None,
     chart: bool = False,
     report: bool = True,
     timeout: int = 240,
 ) -> dict[str, Any]:
-    """Run the CZSC multi-frequency analyzer."""
-
+    """Run the CZSC multi-frequency analyzer.
+    
+    默认使用当前交易频段（HERMES_TRADING_MODE 环境变量）。
+    """
+    if freqs is None:
+        freqs = get_freqs("crypto")
     freq_arg = ",".join(freqs) if isinstance(freqs, list) else freqs
     args = [symbol.upper().replace("/", ""), "--freqs", freq_arg]
     if chart:
@@ -197,13 +202,13 @@ def analyze_market(
     czsc = None
     if with_czsc and resolved_market == "crypto" and fetch.get("symbol"):
         czsc_symbol = crypto_pair_symbol(str(fetch["symbol"]))
-        czsc = czsc_analyze(czsc_symbol, timeout=timeout)
+        czsc = czsc_analyze(czsc_symbol, freqs=czsc_freqs, timeout=timeout)
     elif with_czsc and resolved_market in {"futures", "forex", "us_equity", "a_share"} and isinstance(fetch.get("data"), dict):
         czsc = analyze_market_klines(
             fetch["data"],
             market=str(resolved_market),
             symbol=str(fetch.get("symbol") or stock or symbol or ""),
-            freqs=czsc_freqs,
+            freqs=czsc_freqs or get_freqs(str(resolved_market)),
         )
 
     result = {
