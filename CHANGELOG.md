@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v1.2.10 (2026-06-19) — Crypto 下降上轨 lower high 链
+
+### 修复
+
+- 修复 BTC 这类下降/楔形结构中，上轨混入早期高点导致连线偏离的问题。
+- 下降通道、收敛楔形的上轨改为使用峰值后的 lower high 链，并用折线连接各个有效高点后延长到当前。
+- 子趋势下降通道同样采用 lower high 链，和父级结构画法保持一致。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py BTC`
+
 ## v1.2.9 (2026-06-19) — Crypto 子趋势层
 
 ### 新增

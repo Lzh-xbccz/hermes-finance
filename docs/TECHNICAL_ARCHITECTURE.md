@@ -34,6 +34,7 @@ flowchart TD
 
     H --> H1[Draw rails from first valid swing anchors]
     H1 --> H6[Foundation mode: upper rail uses main rising high chain]
+    H1 --> H7[Descending/wedge mode: upper rail uses lower-high chain]
     D --> H2[Check latest 4 swing pairs]
     H2 --> H3{Latest structure conflicts with parent?}
     H3 -- Yes --> H4[Keep as drawable subtrend]

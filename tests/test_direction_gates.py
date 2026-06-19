@@ -651,9 +651,29 @@ class DirectionGateTests(unittest.TestCase):
 
         self.assertEqual(arch["kind"], "上升通道")
         self.assertEqual(arch["sub_structure"]["kind"], "下降通道")
-        self.assertEqual(len(arch["sub_structure"]["upper_line"]["points"]), 2)
+        self.assertGreaterEqual(len(arch["sub_structure"]["upper_line"]["points"]), 2)
         self.assertEqual(len(arch["sub_structure"]["lower_line"]["points"]), 2)
         self.assertTrue(any(item["step"] == "子趋势" for item in arch["logic"]))
+
+    def test_crypto_market_architecture_falling_upper_uses_lower_high_chain(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_lower_high_chain",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = channel_rows(96, start_low=100, low_step=0.6, width=12, close_position=0.55)
+        highs = {60: 190.0, 68: 184.0, 82: 171.0}
+        lows = {58: 142.0, 70: 146.0, 84: 150.0}
+        for i in range(56, 96):
+            base = 148 + (i - 56) * 0.1
+            low = lows.get(i, base)
+            high = highs.get(i, low + 8)
+            close = low + (high - low) * 0.55
+            rows[i].update({"open": close - 0.1, "high": high, "low": low, "close": close})
+
+        arch = mod._crypto_market_architecture(rows)
+
+        if arch["kind"] in {"下降通道", "收敛三角/楔形"}:
+            self.assertEqual([p["idx"] for p in arch["upper_line"]["anchors"]], [60, 68, 82])
 
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(

@@ -915,6 +915,22 @@ def _main_rising_high_chain(highs, min_record_pct=0.004):
     return selected if len(selected) >= 2 else highs
 
 
+def _main_falling_high_chain(highs, min_drop_pct=0.003):
+    if len(highs) < 3:
+        return highs
+    peak_pos = max(range(len(highs)), key=lambda i: highs[i]['price'])
+    later = highs[peak_pos:]
+    if len(later) < 2:
+        return highs
+    selected = [later[0]]
+    for point in later[1:]:
+        if point['price'] <= selected[-1]['price'] * (1 - min_drop_pct):
+            selected.append(point)
+        elif point['price'] > selected[-1]['price']:
+            selected[-1] = point
+    return selected if len(selected) >= 2 else highs
+
+
 def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
     if len(highs) < 2 or len(lows) < 3:
         return None
@@ -966,7 +982,15 @@ def _sub_structure_from_candidate(cand, end_idx, current):
         return None
     upper = cand['upper']
     lower = cand['lower']
-    upper_line = _architecture_line(cand['highs'], cand['highs'][0]['idx'], end_idx, upper)
+    highs = cand['highs']
+    if cand['kind'] in {'下降通道', '收敛三角/楔形'}:
+        highs = _main_falling_high_chain(highs)
+        projected_upper = _project_line(highs[-2:], end_idx)
+        if projected_upper is not None:
+            upper = float(projected_upper)
+        upper_line = _architecture_polyline(highs, end_idx, upper)
+    else:
+        upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
     lower_line = _architecture_line(cand['lows'], cand['lows'][0]['idx'], end_idx, lower)
     if lower > upper:
         lower, upper = upper, lower
@@ -1068,6 +1092,12 @@ def _crypto_market_architecture(rows):
         upper = selected['upper']
         lower = selected['lower']
         if selected.get('mode') == '底部趋势线':
+            upper_line = _architecture_polyline(highs, end_idx, upper)
+        elif kind in {'下降通道', '收敛三角/楔形'}:
+            highs = _main_falling_high_chain(highs)
+            projected_upper = _project_line(highs[-2:], end_idx)
+            if projected_upper is not None:
+                upper = float(projected_upper)
             upper_line = _architecture_polyline(highs, end_idx, upper)
         else:
             upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
