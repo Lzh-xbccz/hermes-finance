@@ -626,6 +626,20 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(arch["lower_line"]["points"][0]["idx"], 36)
         self.assertIn("底部趋势线", "；".join(item["detail"] for item in arch["logic"]))
 
+    def test_crypto_market_architecture_foundation_upper_uses_main_high_chain(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_upper_chain",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = rising_channel_from_capitulation_low_rows()
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["structure_mode"], "底部趋势线")
+        self.assertEqual([p["idx"] for p in arch["upper_line"]["anchors"]], [40, 72])
+        self.assertNotIn(84, [p["idx"] for p in arch["upper_line"]["anchors"]])
+        self.assertTrue(any("跳过回调 lower high" in item["detail"] for item in arch["logic"]))
+
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(
             "crypto_fetch_market_architecture_dimension",

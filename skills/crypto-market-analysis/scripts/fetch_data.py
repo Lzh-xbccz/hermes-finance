@@ -792,6 +792,24 @@ def _architecture_line(points, start_idx, end_idx, fallback):
     }
 
 
+def _architecture_polyline(points, end_idx, fallback):
+    fallback = float(fallback or 0.0)
+    if len(points) < 2:
+        return _architecture_line(points, 0, end_idx, fallback)
+    anchors = [{'idx': int(p['idx']), 'price': float(p['price'])} for p in points]
+    line_points = list(anchors)
+    if line_points[-1]['idx'] < end_idx:
+        end_price = _project_line(points[-2:], end_idx)
+        line_points.append({
+            'idx': int(end_idx),
+            'price': float(end_price if end_price is not None else fallback),
+        })
+    return {
+        'points': line_points,
+        'anchors': anchors,
+    }
+
+
 def _architecture_kind(high_slope, low_slope, width_pct, threshold=1.0):
     high_up = high_slope > threshold
     high_down = high_slope < -threshold
@@ -875,6 +893,28 @@ def _architecture_candidate(rows, highs, lows, end_idx, current, threshold=1.0, 
     }
 
 
+def _main_rising_high_chain(highs, min_record_pct=0.004):
+    if len(highs) < 3:
+        return highs
+    selected = [highs[0]]
+    record = highs[0]
+    run_peak = None
+    in_record_run = False
+    for point in highs[1:]:
+        if point['price'] >= record['price'] * (1 + min_record_pct):
+            record = point
+            run_peak = point
+            in_record_run = True
+            continue
+        if in_record_run and run_peak and run_peak['idx'] != selected[-1]['idx']:
+            selected.append(run_peak)
+        in_record_run = False
+        run_peak = None
+    if in_record_run and run_peak and run_peak['idx'] != selected[-1]['idx']:
+        selected.append(run_peak)
+    return selected if len(selected) >= 2 else highs
+
+
 def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
     if len(highs) < 2 or len(lows) < 3:
         return None
@@ -886,10 +926,13 @@ def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1
             continue
         if start['price'] > min(p['price'] for p in lows):
             continue
+        early_rebound_low = max(p['price'] for p in later_lows[:3])
+        if early_rebound_low <= start['price'] * 1.18:
+            continue
         if later_lows[-1]['price'] <= start['price'] * 1.08:
             continue
         trend_lows = [start] + later_lows
-        trend_highs = later_highs
+        trend_highs = _main_rising_high_chain(later_highs)
         cand = _architecture_candidate(
             rows,
             trend_highs,
@@ -902,6 +945,9 @@ def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1
         )
         if not cand or cand['kind'] not in {'上升通道', '扩散震荡'}:
             continue
+        upper = _project_line(trend_highs[-2:], end_idx)
+        if upper is not None:
+            cand['upper'] = float(upper)
         support = min(cand['upper'], cand['lower'])
         resistance = max(cand['upper'], cand['lower'])
         span = max(resistance - support, current * 0.005, 0.01)
@@ -991,7 +1037,10 @@ def _crypto_market_architecture(rows):
         kind = selected['kind']
         upper = selected['upper']
         lower = selected['lower']
-        upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
+        if selected.get('mode') == '底部趋势线':
+            upper_line = _architecture_polyline(highs, end_idx, upper)
+        else:
+            upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
         lower_line = _architecture_line(lows, lows[0]['idx'], end_idx, lower)
         start_idx = selected['start_idx']
         mode = selected.get('mode', '摆点窗口')
@@ -1053,6 +1102,11 @@ def _crypto_market_architecture(rows):
         else:
             start_detail = f'结构线从第{start_idx}根K线附近的有效摆点开始，不向更早窗口反推'
         logic.insert(1, {'step': '起点', 'detail': start_detail})
+        if mode == '底部趋势线':
+            logic.insert(
+                2,
+                {'step': '上轨', 'detail': f'上轨连接{len(highs)}个主升有效摆高，跳过回调 lower high'},
+            )
     if selected and recent_probe and recent_probe['kind'] != kind:
         logic.insert(
             3,

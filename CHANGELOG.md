@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v1.2.8 (2026-06-19) — Crypto 上轨主升高点链
+
+### 修复
+
+- 修复底部趋势线模式下，上轨把回调 lower high 一起纳入斜率计算，导致上轨被压低的问题。
+- 上轨改为连接主升有效摆高链；连续创新高压缩为该轮峰值，回调 lower high 不再覆盖父级上轨。
+- ZEC 当前主升上轨锚点为 `2026-06-06 00:00`、`2026-06-09 08:00`、`2026-06-15 12:00`。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.7 (2026-06-19) — Crypto 底部趋势线优先
 
 ### 修复
