@@ -640,6 +640,21 @@ class DirectionGateTests(unittest.TestCase):
         self.assertNotIn(84, [p["idx"] for p in arch["upper_line"]["anchors"]])
         self.assertTrue(any("跳过回调 lower high" in item["detail"] for item in arch["logic"]))
 
+    def test_crypto_market_architecture_keeps_conflicting_recent_structure_as_subtrend(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_subtrend",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = rising_channel_then_pullback_rows()
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["kind"], "上升通道")
+        self.assertEqual(arch["sub_structure"]["kind"], "下降通道")
+        self.assertEqual(len(arch["sub_structure"]["upper_line"]["points"]), 2)
+        self.assertEqual(len(arch["sub_structure"]["lower_line"]["points"]), 2)
+        self.assertTrue(any(item["step"] == "子趋势" for item in arch["logic"]))
+
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(
             "crypto_fetch_market_architecture_dimension",
@@ -679,6 +694,8 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(payload["architecture"]["kind"], "上升通道")
         self.assertEqual(len(payload["lines"]["upper"]), 2)
         self.assertEqual(len(payload["lines"]["lower"]), 2)
+        self.assertIn("subUpper", payload["lines"])
+        self.assertIn("subLower", payload["lines"])
         self.assertIn("LightweightCharts", html)
         self.assertIn("上升通道", html)
         self.assertIn("上轨 / 阻力", html)

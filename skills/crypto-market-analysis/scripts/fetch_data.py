@@ -961,6 +961,35 @@ def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1
     return max(candidates, key=lambda x: (x['score'], x['start_idx'] * -1))
 
 
+def _sub_structure_from_candidate(cand, end_idx, current):
+    if not cand:
+        return None
+    upper = cand['upper']
+    lower = cand['lower']
+    upper_line = _architecture_line(cand['highs'], cand['highs'][0]['idx'], end_idx, upper)
+    lower_line = _architecture_line(cand['lows'], cand['lows'][0]['idx'], end_idx, lower)
+    if lower > upper:
+        lower, upper = upper, lower
+        lower_line, upper_line = upper_line, lower_line
+    span = max(upper - lower, current * 0.005, 0.01)
+    mid = lower + span * 0.5
+    break_buffer = max(current * 0.006, span * 0.08)
+    return {
+        'kind': cand['kind'],
+        'stance': '做空' if cand['kind'] == '下降通道' and current <= mid else '中性',
+        'lower': float(lower),
+        'upper': float(upper),
+        'mid': float(mid),
+        'upper_breakout': float(upper + break_buffer),
+        'lower_breakdown': float(lower - break_buffer),
+        'upper_line': upper_line,
+        'lower_line': lower_line,
+        'high_slope_pct': cand['high_slope'],
+        'low_slope_pct': cand['low_slope'],
+        'reason': f'子趋势={cand["kind"]}，下轨/支撑 {_fmt_level(lower)}，上轨/阻力 {_fmt_level(upper)}',
+    }
+
+
 def _select_architecture_candidate(rows, swings, end_idx, current, threshold=1.0):
     min_idx = max(0, end_idx - 96)
     all_highs = [p for p in swings['highs'] if p['idx'] >= min_idx]
@@ -1028,6 +1057,7 @@ def _crypto_market_architecture(rows):
     swings = _crypto_swings(rows)
     threshold = 1.0
     selected, recent_probe = _select_architecture_candidate(rows, swings, end_idx, current, threshold)
+    sub_structure = None
 
     if selected:
         highs = selected['highs']
@@ -1044,6 +1074,8 @@ def _crypto_market_architecture(rows):
         lower_line = _architecture_line(lows, lows[0]['idx'], end_idx, lower)
         start_idx = selected['start_idx']
         mode = selected.get('mode', '摆点窗口')
+        if recent_probe and recent_probe['kind'] != kind:
+            sub_structure = _sub_structure_from_candidate(recent_probe, end_idx, current)
     else:
         highs = swings['highs'][-4:]
         lows = swings['lows'][-4:]
@@ -1111,8 +1143,8 @@ def _crypto_market_architecture(rows):
         logic.insert(
             3,
             {
-                'step': '短线扰动',
-                'detail': f'最近4组摆点={recent_probe["kind"]}，作为主结构内的回调/反弹处理',
+                'step': '子趋势',
+                'detail': f'最近4组摆点={recent_probe["kind"]}，作为父级主结构内的子趋势单独绘制',
             },
         )
     return {
@@ -1131,6 +1163,7 @@ def _crypto_market_architecture(rows):
         'low_slope_pct': low_slope,
         'structure_start_idx': int(start_idx),
         'structure_mode': mode,
+        'sub_structure': sub_structure,
         'logic': logic,
         'reason': reason,
     }

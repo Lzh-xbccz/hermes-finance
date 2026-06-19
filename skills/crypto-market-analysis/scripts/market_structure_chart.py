@@ -154,9 +154,14 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
 
     upper_line = arch.get("upper_line", {})
     lower_line = arch.get("lower_line", {})
+    sub = arch.get("sub_structure") or {}
+    sub_upper_line = sub.get("upper_line", {})
+    sub_lower_line = sub.get("lower_line", {})
     upper = _line_to_series(upper_line, rows)
     lower = _line_to_series(lower_line, rows)
     mid = _midline_series(upper_line, lower_line, rows)
+    sub_upper = _line_to_series(sub_upper_line, rows)
+    sub_lower = _line_to_series(sub_lower_line, rows)
 
     return {
         "symbol": symbol,
@@ -170,6 +175,8 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
             "upper": upper,
             "lower": lower,
             "mid": mid,
+            "subUpper": sub_upper,
+            "subLower": sub_lower,
         },
         "markers": _swing_markers(arch, rows),
         "architecture": {
@@ -191,6 +198,16 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
             "low_slope_pct": arch.get("low_slope_pct", 0.0),
             "reason": arch["reason"],
             "logic": arch.get("logic", []),
+            "sub_structure": {
+                "kind": sub.get("kind", ""),
+                "stance": sub.get("stance", ""),
+                "lower": sub.get("lower", 0.0),
+                "upper": sub.get("upper", 0.0),
+                "mid": sub.get("mid", 0.0),
+                "lower_text": _fmt_level(sub.get("lower", 0.0)) if sub else "",
+                "upper_text": _fmt_level(sub.get("upper", 0.0)) if sub else "",
+                "reason": sub.get("reason", ""),
+            } if sub else None,
         },
     }
 
@@ -227,6 +244,8 @@ HTML_TEMPLATE = """<!doctype html>
       --rail-upper: #B45309;
       --rail-lower: #047857;
       --mid: #2563EB;
+      --sub-upper: #9333EA;
+      --sub-lower: #0891B2;
       --danger: #DC2626;
       --ok: #059669;
       --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
@@ -400,6 +419,8 @@ HTML_TEMPLATE = """<!doctype html>
     .swatch--upper { background: var(--rail-upper); }
     .swatch--lower { background: var(--rail-lower); }
     .swatch--mid { background: var(--mid); }
+    .swatch--sub-upper { background: repeating-linear-gradient(90deg, var(--sub-upper), var(--sub-upper) 6px, transparent 6px, transparent 10px); }
+    .swatch--sub-lower { background: repeating-linear-gradient(90deg, var(--sub-lower), var(--sub-lower) 6px, transparent 6px, transparent 10px); }
     .logic {
       display: grid;
       gap: 8px;
@@ -490,6 +511,8 @@ HTML_TEMPLATE = """<!doctype html>
           <div class="legend__item"><span class="swatch swatch--upper"></span>上轨 / 阻力</div>
           <div class="legend__item"><span class="swatch swatch--lower"></span>下轨 / 支撑</div>
           <div class="legend__item"><span class="swatch swatch--mid"></span>中轨</div>
+          <div class="legend__item"><span class="swatch swatch--sub-upper"></span>子趋势上轨</div>
+          <div class="legend__item"><span class="swatch swatch--sub-lower"></span>子趋势下轨</div>
         </div>
         <h2>Logic</h2>
         <ul id="logic" class="logic"></ul>
@@ -575,6 +598,8 @@ HTML_TEMPLATE = """<!doctype html>
     addLine(payload.lines.upper, "#B45309", 3, LightweightCharts.LineStyle.Solid);
     addLine(payload.lines.lower, "#047857", 3, LightweightCharts.LineStyle.Solid);
     addLine(payload.lines.mid, "#2563EB", 2, LightweightCharts.LineStyle.Dashed);
+    addLine(payload.lines.subUpper, "#9333EA", 2, LightweightCharts.LineStyle.Dotted);
+    addLine(payload.lines.subLower, "#0891B2", 2, LightweightCharts.LineStyle.Dotted);
 
     candle.createPriceLine({
       price: arch.upper_breakout,

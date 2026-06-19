@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v1.2.9 (2026-06-19) — Crypto 子趋势层
+
+### 新增
+
+- 市场架构新增 `sub_structure`，保留最近4组摆点形成的回调/反弹子趋势。
+- HTML 形态图新增子趋势上轨/下轨虚线，父级主结构和子级回调结构可以同时显示。
+- ZEC 当前展示为父级 `上升通道`，子趋势 `下降通道`，避免二选一覆盖。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.8 (2026-06-19) — Crypto 上轨主升高点链
 
 ### 修复

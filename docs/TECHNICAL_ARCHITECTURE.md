@@ -36,7 +36,7 @@ flowchart TD
     H1 --> H6[Foundation mode: upper rail uses main rising high chain]
     D --> H2[Check latest 4 swing pairs]
     H2 --> H3{Latest structure conflicts with parent?}
-    H3 -- Yes --> H4[Mark as short-term disturbance]
+    H3 -- Yes --> H4[Keep as drawable subtrend]
     H3 -- No --> H5[Use same parent structure]
 
     H1 --> I{Current price location}
@@ -148,4 +148,5 @@ The visual chart draws:
 - Upper rail / resistance, lower rail / support, and mid rail.
 - Swing high and swing low anchor markers used by the structure detector.
 - Breakout and breakdown trigger lines based on the same buffer used by the text analysis.
+- A subtrend layer when recent swing pairs form a smaller countertrend channel inside the parent structure.
 - A side panel with structure type, current location, stance, rail prices, and step-by-step logic.
