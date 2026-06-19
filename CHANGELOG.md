@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## v1.2.6 (2026-06-19) — Crypto 市场架构趋势修复
+
+### 修复
+
+- 修复 4H 市场架构只取最后4组摆点，导致主升后的短线回调被误判为下降通道的问题。
+- 结构线从选中结构的第一个有效摆高/摆低开始绘制，不再向更早取样窗口反推，避免起始点和价格严重失真。
+- HTML 中轨改为在上下轨共同时间段内重新投影，避免上下轨起点不同导致中轨错位。
+
+### 改进
+
+- 市场架构新增候选选择：在多组摆点窗口中优先选择覆盖更完整、仍包住当前价格的父级结构。
+- 最近4组摆点若与父级结构相反，会显示为 `短线扰动`，不直接覆盖主结构。
+- 增加回归测试，覆盖“上升通道后短线回调仍保留父级上升架构”的场景。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.5 (2026-06-19) — Crypto 市场架构 HTML 形态图
 
 ### 新增

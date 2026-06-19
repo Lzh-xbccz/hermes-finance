@@ -60,6 +60,24 @@ def channel_rows(
     return rows
 
 
+def rising_channel_then_pullback_rows() -> list[dict[str, float | int | str]]:
+    rows = channel_rows(96, start_low=100, low_step=1.0, width=10, close_position=0.55)
+    for i in range(72, 96):
+        base = 172 - (i - 72) * 0.75
+        high_boost = 5.0 if i % 6 == 2 else 0.0
+        low_boost = -5.0 if i % 6 == 5 else 0.0
+        low = base + low_boost
+        high = base + 10 + high_boost
+        close = low + (high - low) * 0.45
+        rows[i].update({
+            "open": close + 0.1,
+            "high": high,
+            "low": low,
+            "close": close,
+        })
+    return rows
+
+
 class DirectionGateTests(unittest.TestCase):
     def test_futures_requires_multidimension_confirmation(self) -> None:
         mod = load_module(
@@ -543,6 +561,20 @@ class DirectionGateTests(unittest.TestCase):
         self.assertGreater(arch["upper_breakout"], arch["upper"])
         self.assertLess(arch["lower_breakdown"], arch["lower"])
         self.assertTrue(any(item["step"] == "轨道" for item in arch["logic"]))
+
+    def test_crypto_market_architecture_keeps_parent_rising_channel_during_pullback(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_pullback",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = rising_channel_then_pullback_rows()
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["kind"], "上升通道")
+        self.assertIn("最近4组摆点=下降通道", "；".join(item["detail"] for item in arch["logic"]))
+        self.assertEqual(arch["upper_line"]["points"][0]["idx"], arch["upper_line"]["anchors"][0]["idx"])
+        self.assertEqual(arch["lower_line"]["points"][0]["idx"], arch["lower_line"]["anchors"][0]["idx"])
 
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(

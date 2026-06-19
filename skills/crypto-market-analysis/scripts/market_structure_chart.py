@@ -64,12 +64,36 @@ def _line_to_series(line, rows):
     return series
 
 
-def _midline_series(upper, lower):
-    if len(upper) < 2 or len(lower) < 2:
+def _line_value_at(line, idx):
+    points = line.get("points", [])
+    if len(points) < 2:
+        return None
+    first, last = points[0], points[-1]
+    idx_delta = last.get("idx", 0) - first.get("idx", 0)
+    if idx_delta == 0:
+        return float(last.get("price", 0.0))
+    slope = (last.get("price", 0.0) - first.get("price", 0.0)) / idx_delta
+    return float(first.get("price", 0.0) + slope * (idx - first.get("idx", 0)))
+
+
+def _midline_series(upper_line, lower_line, rows):
+    upper_points = upper_line.get("points", [])
+    lower_points = lower_line.get("points", [])
+    if len(upper_points) < 2 or len(lower_points) < 2:
+        return []
+    start_idx = max(int(upper_points[0]["idx"]), int(lower_points[0]["idx"]))
+    end_idx = min(int(upper_points[-1]["idx"]), int(lower_points[-1]["idx"]))
+    if end_idx <= start_idx:
+        end_idx = max(int(upper_points[-1]["idx"]), int(lower_points[-1]["idx"]))
+    start_upper = _line_value_at(upper_line, start_idx)
+    start_lower = _line_value_at(lower_line, start_idx)
+    end_upper = _line_value_at(upper_line, end_idx)
+    end_lower = _line_value_at(lower_line, end_idx)
+    if None in {start_upper, start_lower, end_upper, end_lower}:
         return []
     return [
-        {"time": upper[0]["time"], "value": (upper[0]["value"] + lower[0]["value"]) / 2},
-        {"time": upper[-1]["time"], "value": (upper[-1]["value"] + lower[-1]["value"]) / 2},
+        {"time": _time_at(rows, start_idx), "value": (start_upper + start_lower) / 2},
+        {"time": _time_at(rows, end_idx), "value": (end_upper + end_lower) / 2},
     ]
 
 
@@ -128,9 +152,11 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
             "color": "rgba(5, 150, 105, 0.28)" if close_price >= open_price else "rgba(220, 38, 38, 0.25)",
         })
 
-    upper = _line_to_series(arch.get("upper_line", {}), rows)
-    lower = _line_to_series(arch.get("lower_line", {}), rows)
-    mid = _midline_series(upper, lower)
+    upper_line = arch.get("upper_line", {})
+    lower_line = arch.get("lower_line", {})
+    upper = _line_to_series(upper_line, rows)
+    lower = _line_to_series(lower_line, rows)
+    mid = _midline_series(upper_line, lower_line, rows)
 
     return {
         "symbol": symbol,

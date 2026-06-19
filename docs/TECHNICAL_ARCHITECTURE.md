@@ -11,10 +11,9 @@ flowchart TD
     C -- No --> C1[Mark technical structure missing]
     C -- Yes --> D[Detect swing highs and swing lows]
 
-    D --> E[Measure swing high slope]
-    D --> F[Measure swing low slope]
-    E --> G{Structure Type}
-    F --> G
+    D --> E[Build multiple swing-window candidates]
+    E --> F[Score parent structures by coverage, freshness, price containment]
+    F --> G{Structure Type}
 
     G -- Higher highs + higher lows --> G1[Ascending channel]
     G -- Lower highs + lower lows --> G2[Descending channel]
@@ -23,14 +22,20 @@ flowchart TD
     G -- Flat and narrow --> G5[Range box]
     G -- Flat and wide --> G6[Wide range]
 
-    G1 --> H[Project upper and lower rails]
+    G1 --> H[Project upper and lower rails from selected anchors]
     G2 --> H
     G3 --> H
     G4 --> H
     G5 --> H
     G6 --> H
 
-    H --> I{Current price location}
+    H --> H1[Draw rails from first valid swing anchors]
+    D --> H2[Check latest 4 swing pairs]
+    H2 --> H3{Latest structure conflicts with parent?}
+    H3 -- Yes --> H4[Mark as short-term disturbance]
+    H3 -- No --> H5[Use same parent structure]
+
+    H1 --> I{Current price location}
     I -- Above upper rail + buffer --> I1[Breakout above rail]
     I -- Below lower rail + buffer --> I2[Breakdown below rail]
     I -- Inside rail, near upper --> I3[Inside, near upper rail]

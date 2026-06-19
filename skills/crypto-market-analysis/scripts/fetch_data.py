@@ -792,6 +792,123 @@ def _architecture_line(points, start_idx, end_idx, fallback):
     }
 
 
+def _architecture_kind(high_slope, low_slope, width_pct, threshold=1.0):
+    high_up = high_slope > threshold
+    high_down = high_slope < -threshold
+    low_up = low_slope > threshold
+    low_down = low_slope < -threshold
+    if high_up and low_up:
+        return '上升通道'
+    if high_down and low_down:
+        return '下降通道'
+    if high_down and low_up:
+        return '收敛三角/楔形'
+    if high_up and low_down:
+        return '扩散震荡'
+    return '箱体结构' if width_pct < 18 else '宽幅震荡'
+
+
+def _candidate_width_pct(rows, start_idx, end_idx):
+    segment = rows[max(0, int(start_idx)):int(end_idx) + 1]
+    if not segment:
+        return 0.0
+    high = max(_high(r) for r in segment)
+    low = min(_low(r) for r in segment)
+    return (high - low) / max(low, 0.01) * 100
+
+
+def _architecture_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
+    if len(highs) < 2 or len(lows) < 2:
+        return None
+    start_idx = min(highs[0]['idx'], lows[0]['idx'])
+    high_slope = _swing_slope_pct(highs)
+    low_slope = _swing_slope_pct(lows)
+    width_pct = _candidate_width_pct(rows, start_idx, end_idx)
+    kind = _architecture_kind(high_slope, low_slope, width_pct, threshold)
+    upper = _project_line(highs, end_idx)
+    lower = _project_line(lows, end_idx)
+    if upper is None or lower is None:
+        return None
+    upper = float(upper)
+    lower = float(lower)
+    span = max(abs(upper - lower), current * 0.005, 0.01)
+    low_level, high_level = sorted((lower, upper))
+    ratio = (current - low_level) / span
+    outside = max(0.0, -ratio, ratio - 1.0)
+    last_anchor_idx = max(highs[-1]['idx'], lows[-1]['idx'])
+    duration = max(1, last_anchor_idx - start_idx)
+    freshness = max(0, end_idx - last_anchor_idx)
+    count = min(len(highs), len(lows))
+    kind_bonus = {
+        '上升通道': 8.0,
+        '下降通道': 8.0,
+        '收敛三角/楔形': 4.0,
+        '扩散震荡': 2.0,
+    }.get(kind, -4.0)
+    parallel_penalty = 0.0
+    if kind in {'上升通道', '下降通道'}:
+        parallel_penalty = abs(abs(high_slope) - abs(low_slope)) * 0.15
+    score = (
+        duration * 0.9
+        + count * 4.0
+        + min(abs(high_slope) + abs(low_slope), 60.0) * 0.35
+        + kind_bonus
+        - freshness * 0.25
+        - outside * 60.0
+        - parallel_penalty
+    )
+    return {
+        'kind': kind,
+        'highs': highs,
+        'lows': lows,
+        'high_slope': high_slope,
+        'low_slope': low_slope,
+        'upper': upper,
+        'lower': lower,
+        'start_idx': start_idx,
+        'last_anchor_idx': last_anchor_idx,
+        'count': count,
+        'score': score,
+        'ratio': ratio,
+    }
+
+
+def _select_architecture_candidate(rows, swings, end_idx, current, threshold=1.0):
+    min_idx = max(0, end_idx - 96)
+    all_highs = [p for p in swings['highs'] if p['idx'] >= min_idx]
+    all_lows = [p for p in swings['lows'] if p['idx'] >= min_idx]
+    max_count = min(12, len(all_highs), len(all_lows))
+    if max_count < 2:
+        return None, None
+    min_count = 4 if max_count >= 4 else 2
+    candidates = []
+    for count in range(min_count, max_count + 1):
+        cand = _architecture_candidate(
+            rows,
+            all_highs[-count:],
+            all_lows[-count:],
+            end_idx,
+            current,
+            threshold,
+        )
+        if cand:
+            candidates.append(cand)
+    if not candidates:
+        return None, None
+    selected = max(candidates, key=lambda x: (x['score'], x['count'], x['last_anchor_idx']))
+    recent = None
+    if max_count >= 4:
+        recent = _architecture_candidate(
+            rows,
+            all_highs[-4:],
+            all_lows[-4:],
+            end_idx,
+            current,
+            threshold,
+        )
+    return selected, recent
+
+
 def _crypto_market_architecture(rows):
     rows = _normalize_kline_rows(rows)
     if len(rows) < 20:
@@ -818,38 +935,25 @@ def _crypto_market_architecture(rows):
     recent_high = max(_high(r) for r in recent)
     recent_low = min(_low(r) for r in recent)
     swings = _crypto_swings(rows)
-    highs = swings['highs'][-4:]
-    lows = swings['lows'][-4:]
-    high_slope = _swing_slope_pct(highs)
-    low_slope = _swing_slope_pct(lows)
-
     threshold = 1.0
-    high_up = high_slope > threshold
-    high_down = high_slope < -threshold
-    low_up = low_slope > threshold
-    low_down = low_slope < -threshold
+    selected, recent_probe = _select_architecture_candidate(rows, swings, end_idx, current, threshold)
 
-    if len(highs) >= 2 and len(lows) >= 2:
-        if high_up and low_up:
-            kind = '上升通道'
-        elif high_down and low_down:
-            kind = '下降通道'
-        elif high_down and low_up:
-            kind = '收敛三角/楔形'
-        elif high_up and low_down:
-            kind = '扩散震荡'
-        else:
-            width_pct = (recent_high - recent_low) / max(recent_low, 0.01) * 100
-            kind = '箱体结构' if width_pct < 18 else '宽幅震荡'
-        upper = _project_line(highs, len(rows) - 1)
-        lower = _project_line(lows, len(rows) - 1)
-        if upper is None:
-            upper = recent_high
-        if lower is None:
-            lower = recent_low
-        upper_line = _architecture_line(highs, start_idx, end_idx, upper)
-        lower_line = _architecture_line(lows, start_idx, end_idx, lower)
+    if selected:
+        highs = selected['highs']
+        lows = selected['lows']
+        high_slope = selected['high_slope']
+        low_slope = selected['low_slope']
+        kind = selected['kind']
+        upper = selected['upper']
+        lower = selected['lower']
+        upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
+        lower_line = _architecture_line(lows, lows[0]['idx'], end_idx, lower)
+        start_idx = selected['start_idx']
     else:
+        highs = swings['highs'][-4:]
+        lows = swings['lows'][-4:]
+        high_slope = _swing_slope_pct(highs)
+        low_slope = _swing_slope_pct(lows)
         width_pct = (recent_high - recent_low) / max(recent_low, 0.01) * 100
         kind = '箱体结构' if width_pct < 18 else '结构待确认'
         upper = recent_high
@@ -890,12 +994,22 @@ def _crypto_market_architecture(rows):
 
     reason = f'市场架构={kind}，{position}，下轨/支撑 {_fmt_level(lower)}，上轨/阻力 {_fmt_level(upper)}'
     logic = [
-        {'step': '取样', 'detail': f'最近{len(recent)}根4H K线，识别摆高{len(highs)}个、摆低{len(lows)}个'},
+        {'step': '取样', 'detail': f'最近{len(recent)}根4H K线，选中摆高{len(highs)}个、摆低{len(lows)}个作为主结构'},
         {'step': '斜率', 'detail': f'摆高斜率{high_slope:+.2f}%，摆低斜率{low_slope:+.2f}%'},
         {'step': '分类', 'detail': kind},
         {'step': '轨道', 'detail': f'下轨/支撑 {_fmt_level(lower)}，中轨 {_fmt_level(mid)}，上轨/阻力 {_fmt_level(upper)}'},
         {'step': '触发', 'detail': f'上破 {_fmt_level(upper_breakout)} / 下破 {_fmt_level(lower_breakdown)}'},
     ]
+    if selected:
+        logic.insert(1, {'step': '起点', 'detail': f'结构线从第{start_idx}根K线附近的有效摆点开始，不向更早窗口反推'})
+    if selected and recent_probe and recent_probe['kind'] != kind:
+        logic.insert(
+            3,
+            {
+                'step': '短线扰动',
+                'detail': f'最近4组摆点={recent_probe["kind"]}，作为主结构内的回调/反弹处理',
+            },
+        )
     return {
         'kind': kind,
         'stance': stance,
@@ -910,6 +1024,7 @@ def _crypto_market_architecture(rows):
         'lower_line': lower_line,
         'high_slope_pct': high_slope,
         'low_slope_pct': low_slope,
+        'structure_start_idx': int(start_idx),
         'logic': logic,
         'reason': reason,
     }
