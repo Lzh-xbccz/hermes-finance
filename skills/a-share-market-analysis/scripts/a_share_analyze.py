@@ -14,10 +14,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os as _os
 import subprocess
+import sys as _sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', '..', '..', '..', 'scripts'))
+from shared_ta import (
+    classify_pattern as _classify_pattern,
+    classify_today as _classify_today,
+)
 
 FETCHER = Path(__file__).resolve().parent / "a_share_fetch.py"
 
@@ -58,6 +65,7 @@ def market_status_text(state: Dict[str, str]) -> str:
     return sh or "未知"
 
 
+# ── A 股专用 classify_pattern（与 shared_ta 不兼容：用开盘价做基线 + 额外阳线确认）
 def classify_pattern(rows: List[Dict[str, Any]]) -> str:
     if len(rows) < 10:
         return "数据不足"
@@ -83,25 +91,9 @@ def classify_pattern(rows: List[Dict[str, Any]]) -> str:
     return "阴跌磨人"
 
 
+# classify_today → 接 shared_ta（A 股参数）
 def classify_today(rows: List[Dict[str, Any]]) -> str:
-    if len(rows) < 5:
-        return "数据不足"
-    closes = [r["close"] for r in rows]
-    highs = [r["high"] for r in rows]
-    lows = [r["low"] for r in rows]
-    latest = closes[-1]
-    prev = closes[-2]
-    recent_high = max(highs[-5:])
-    recent_low = min(lows[-5:])
-    if latest >= recent_high * 0.998:
-        return "延续"
-    if latest > prev and latest > recent_low * 1.01:
-        return "回踩"
-    if latest < prev and latest > recent_low * 1.01:
-        return "诱多"
-    if latest < recent_low * 0.995:
-        return "诱空"
-    return "纯噪音"
+    return _classify_today(rows, continuation_ratio=0.998, bounce_ratio=1.01, breakdown_ratio=0.995)
 
 
 def summarize_breadth(breadth: Dict[str, Any], key: str) -> str:
