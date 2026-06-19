@@ -336,6 +336,65 @@ class DirectionGateTests(unittest.TestCase):
         self.assertIn("宏观/风险偏好", votes["做多"][0])
         self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
+    def test_crypto_news_events_count_as_one_dimension(self) -> None:
+        mod = load_module(
+            "crypto_fetch_news_dimension_gate",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 0.0,
+                "oi_60m_change_pct": 0.0,
+                "latest_long_short_ratio": 1.0,
+                "latest_funding_rate": 0.0,
+            },
+            "news": {
+                "bullish": [
+                    {"title": "Spot bitcoin ETF inflows return"},
+                    {"title": "Institutional demand lifts bitcoin"},
+                ],
+                "bearish": [],
+            },
+            "macro": {},
+            "sentiment": {},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(len(votes["做多"]), 1)
+        self.assertIn("新闻/事件基本面", votes["做多"][0])
+        self.assertEqual(mod.direction_from_evidence(votes), "观望")
+
+    def test_crypto_mixed_news_events_are_neutral(self) -> None:
+        mod = load_module(
+            "crypto_fetch_mixed_news_gate",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 0.0,
+                "oi_60m_change_pct": 0.0,
+                "latest_long_short_ratio": 1.0,
+                "latest_funding_rate": 0.0,
+            },
+            "news": {
+                "bullish": [{"title": "Bitcoin ETF inflow improves"}],
+                "bearish": [{"title": "Crypto exchange hack hits sentiment"}],
+            },
+            "macro": {},
+            "sentiment": {},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(votes["做多"], [])
+        self.assertEqual(votes["做空"], [])
+        self.assertTrue(any("新闻/事件多空混合" in item for item in votes["neutral"]))
+
     def test_crypto_extreme_funding_blocks_long_direction(self) -> None:
         mod = load_module(
             "crypto_fetch_funding_veto",
@@ -356,6 +415,10 @@ class DirectionGateTests(unittest.TestCase):
                 "vix_price": 12.0,
                 "dxy_change_pct": -0.8,
                 "asset_5d_change_pct": 5.0,
+            },
+            "news": {
+                "bullish": [{"title": "Spot bitcoin ETF inflows return"}],
+                "bearish": [],
             },
             "sentiment": {"fear_greed": 30},
             "options": {"put_call_ratio": 0.6},

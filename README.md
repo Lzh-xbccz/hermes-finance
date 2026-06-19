@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.1.5-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.1.6-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 Hermes Finance 是一个给 **Claude Code、Codex、Cursor、Gemini、Cline、Roo、Continue、VS Code Copilot 等 AI 编程/研究工具** 使用的金融市场分析框架。它把行情采集、市场路由、八维分析、CZSC 缠论确认和 MCP/Skills 接入放在同一个仓库里，目标是让 AI 不再只给“涨跌摘要”，而是按统一证据链输出可复核的市场判断。
@@ -419,6 +419,13 @@ cd skills/a-share-market-analysis/sequoia && python3 main.py
 ## 📋 更新日志
 
 所有版本详见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+### v1.1.6 (2026-06-19) — Crypto 新闻/基本面前置
+
+- Crypto 新增 `news` block，抓取并归类 ETF、监管、机构需求、交易所风险等事件面。
+- `direction` block 已把 `新闻/事件基本面` 作为独立维度纳入方向门槛。
+- 多条同向新闻只算一个维度，多空新闻混合转中性，避免新闻重复投票。
+- 新增回归测试覆盖新闻维度归并和混合新闻中性处理。
 
 ### v1.1.5 (2026-06-19) — Crypto 脚本级方向门槛
 

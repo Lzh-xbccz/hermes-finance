@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """加密货币八维分析数据采集脚本。用法: python3 fetch_data.py <coin_id> [blocks]
-blocks: all | price | klines | chain | contracts | sentiment | macro | exchanges | options
+blocks: all | price | klines | chain | contracts | sentiment | macro | news | exchanges | options
 多个block用逗号分隔，如: python3 fetch_data.py bitcoin price,contracts,macro
 
 并发策略：
@@ -10,11 +10,12 @@ blocks: all | price | klines | chain | contracts | sentiment | macro | exchanges
 - 其他组(Deribit/alternative.me/blockchain.info): 全并行
 - 组与组之间并行执行
 """
-import json, sys, time, urllib.request
+import json, sys, time, urllib.parse, urllib.request
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import StringIO
 import threading
+import xml.etree.ElementTree as ET
 
 UA = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -128,6 +129,19 @@ def safe_fetch(url, label="", timeout=10):
     except Exception as e:
         print(f'⚠️ {label or url}: {type(e).__name__} {e}')
         return None
+
+
+def fetch_text(url, timeout=10):
+    req = urllib.request.Request(_bust_cache(url), headers=UA)
+    return urllib.request.urlopen(req, timeout=timeout).read().decode('utf-8', 'ignore')
+
+
+def safe_fetch_text(url, label="", timeout=10):
+    try:
+        return fetch_text(url, timeout)
+    except Exception as e:
+        print(f'⚠️ {label or url}: {type(e).__name__} {e}')
+        return ''
 
 def fmt_ts(ts_ms):
     return datetime.fromtimestamp(ts_ms/1000, tz=timezone.utc).strftime('%m-%d %H:%M')
@@ -378,6 +392,102 @@ def block_sentiment(coin_id):
             val = int(x['value'])
             print(f'{x["timestamp"]}: {val:3d} {"█"*(val//5)}{"░"*(20-val//5)} {x["value_classification"]}')
 
+
+# ─── 块4.5: 新闻/事件面 ───
+def fetch_crypto_news(coin_id, limit=8):
+    base = COIN_SYMBOL_ALIASES.get(coin_id.lower(), coin_id.upper())
+    query = f'{base} bitcoin ETF OR crypto regulation OR exchange hack OR institutional inflow when:7d'
+    url = 'https://news.google.com/rss/search?q=' + urllib.parse.quote(query) + '&hl=en-US&gl=US&ceid=US:en'
+    text = safe_fetch_text(url, 'Google News')
+    if not text:
+        return []
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return []
+    out = []
+    for item in root.findall('./channel/item')[:limit]:
+        out.append({
+            'title': item.findtext('title', '').strip(),
+            'source': item.findtext('source', '').strip(),
+            'pubDate': item.findtext('pubDate', '').strip(),
+        })
+    return out
+
+
+def _news_signal(title):
+    text = title.lower()
+    bullish = [
+        'etf inflow',
+        'etfs inflow',
+        'record inflow',
+        'spot bitcoin etf inflows',
+        'buys bitcoin',
+        'adds bitcoin',
+        'bitcoin treasury',
+        'approval',
+        'approved',
+        'reserve',
+        'institutional demand',
+        'rate cut',
+    ]
+    bearish = [
+        'etf outflow',
+        'etfs outflow',
+        'record outflow',
+        'spot bitcoin etf outflows',
+        'sells bitcoin',
+        'sold bitcoin',
+        'lawsuit',
+        'probe',
+        'sec charges',
+        'hack',
+        'exploit',
+        'ban',
+        'crackdown',
+        'liquidation',
+        'rate hike',
+    ]
+    has_bullish = any(token in text for token in bullish)
+    has_bearish = any(token in text for token in bearish)
+    if has_bullish and not has_bearish:
+        return '做多'
+    if has_bearish and not has_bullish:
+        return '做空'
+    if has_bullish and has_bearish:
+        return 'neutral'
+    return None
+
+
+def classify_crypto_news(news):
+    out = {'events': news[:8], 'bullish': [], 'bearish': [], 'neutral': []}
+    for item in news[:8]:
+        signal = _news_signal(item.get('title', ''))
+        if signal == '做多':
+            out['bullish'].append(item)
+        elif signal == '做空':
+            out['bearish'].append(item)
+        elif signal == 'neutral':
+            out['neutral'].append(item)
+    return out
+
+
+def block_news(coin_id):
+    print('=== 新闻/事件面 ===')
+    classified = classify_crypto_news(fetch_crypto_news(coin_id))
+    events = classified['events']
+    if not events:
+        print('新闻源暂缺，事件面不参与定向')
+        return
+    for item in events:
+        signal = _news_signal(item.get('title', ''))
+        tag = '🟢' if signal == '做多' else '🔴' if signal == '做空' else '⚪'
+        print(f'{tag} {item.get("title", "")} | {item.get("source", "")}')
+    print(
+        f"事件归类: 偏多 {len(classified['bullish'])} / "
+        f"偏空 {len(classified['bearish'])} / 中性 {len(classified['neutral'])}"
+    )
+
 # ─── 块5: 宏观面 ───
 def block_macro(coin_id):
     print('=== 宏观面 ===')
@@ -611,6 +721,8 @@ def _crypto_price_bias(daily, h4):
 
 
 def _crypto_dimension(reason):
+    if reason.startswith(('新闻/事件', 'ETF/监管/机构')):
+        return '新闻/事件基本面'
     if reason.startswith('技术结构') or '4H主导手法' in reason:
         return '技术结构'
     if reason.startswith(('合约', 'OI', '资金费率', '多空比')):
@@ -734,6 +846,25 @@ def _macro_votes(data, votes):
             votes['做空'].append(f'BTC 5日 {btc_5d:+.2f}% 内部风险偏好走弱')
 
 
+def _news_votes(data, votes):
+    news = data.get('news') or {}
+    bullish = news.get('bullish') or []
+    bearish = news.get('bearish') or []
+    if not news:
+        votes['missing'].append('新闻/事件基本面')
+        return
+    if bullish and not bearish:
+        votes['做多'].append('新闻/事件偏多：' + '；'.join(item.get('title', '') for item in bullish[:3]))
+    elif bearish and not bullish:
+        votes['做空'].append('新闻/事件偏空：' + '；'.join(item.get('title', '') for item in bearish[:3]))
+    elif bullish and bearish:
+        votes['neutral'].append(
+            f"新闻/事件多空混合：偏多{len(bullish)}条 / 偏空{len(bearish)}条"
+        )
+    else:
+        votes['neutral'].append('新闻/事件未发现明确 ETF/监管/机构方向信号')
+
+
 def directional_evidence(data):
     votes = {
         '做多': [],
@@ -762,6 +893,7 @@ def directional_evidence(data):
         votes['neutral'].append(f'4H主导手法={pattern}')
 
     _contract_votes(data, votes)
+    _news_votes(data, votes)
     _macro_votes(data, votes)
 
     sentiment = data.get('sentiment') or {}
@@ -970,6 +1102,7 @@ def collect_direction_snapshot(coin_id):
         fear_greed = _to_float(fng['data'][0]['value'])
     except (TypeError, KeyError, IndexError):
         fear_greed = None
+    news = classify_crypto_news(fetch_crypto_news(coin_id))
 
     return {
         'symbol': symbol,
@@ -987,6 +1120,7 @@ def collect_direction_snapshot(coin_id):
             'vix_price': vix.get('price'),
             'dxy_change_pct': dxy.get('change_pct'),
         },
+        'news': news,
         'sentiment': {'fear_greed': fear_greed},
         'exchanges': {'spread_pct': _exchange_spread(coin_id)},
         'options': {'put_call_ratio': _option_put_call_ratio(coin_id)},
@@ -1010,14 +1144,14 @@ def block_direction_gate(coin_id):
 BLOCKS = {
     'resolve': block_resolve, 'price': block_price, 'klines': block_klines,
     'chain': block_chain, 'contracts': block_contracts, 'exchanges': block_exchanges,
-    'sentiment': block_sentiment, 'macro': block_macro, 'direction': block_direction_gate,
-    'options': block_options,
+    'sentiment': block_sentiment, 'macro': block_macro, 'news': block_news,
+    'direction': block_direction_gate, 'options': block_options,
 }
 
 # 按数据源分组（同源串行避免限流，异源并行加速）
 SOURCE_GROUPS = {
     'binance': ['klines', 'contracts', 'price', 'exchanges'],  # 全并行，限制宽松
-    'yahoo': ['macro', 'direction'],              # direction 内含 Yahoo，和 macro 串行避免429
+    'yahoo': ['news', 'macro', 'direction'],      # direction 内含新闻/Yahoo，串行避免限流
     'other': ['resolve', 'chain', 'sentiment', 'options'],  # 全并行
 }
 
