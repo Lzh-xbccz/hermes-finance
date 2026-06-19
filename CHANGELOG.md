@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## v1.2.1 (2026-06-19) — CZSC 稳定性修复
+
+### 修复
+
+- 修复 `tests/test_czsc_adapter.py` 中重复空函数导致测试套件无法启动的问题。
+- 修复 A 股、外汇、美股分析脚本在按文件路径加载或非特定工作目录运行时找不到 `shared_ta` 的问题。
+- 修复 crypto CZSC 脚本重复拉取同一周期 K 线的问题，改为一次采集后复用。
+
+### 稳定性改进
+
+- `czsc` 依赖锁定到已对照验证的 commit，避免上游 GitHub HEAD 变化导致分析结果或 API 突然漂移。
+- CZSC 分析新增按周期区分的最小 K 线数量门槛，避免样本过少时输出过强结构判断。
+- crypto CZSC 回看窗口改为按周期动态设置，长周期分析可获得足够历史样本。
+- 报告风险提示明确区分 `czsc` 结构计算与 Hermes 启发式摘要。
+
+### 验证
+
+- `python3 -m py_compile tests/test_czsc_adapter.py hermes_finance/czsc_adapter.py scripts/czsc_analyze.py`
+- `python3 -m py_compile skills/forex-market-analysis/scripts/forex_analyze.py skills/us-equity-market-analysis/scripts/us_equity_analyze.py skills/a-share-market-analysis/scripts/a_share_analyze.py`
+- `python3 -m unittest discover -s tests`
+
 ## v1.1.6 (2026-06-19) — Crypto 新闻/基本面前置
 
 ### 新增

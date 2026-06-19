@@ -45,11 +45,41 @@ SIGNAL_DEFS = {
 
 DEFAULT_FREQS = ['1h', '15m']
 LOOKBACK_DAYS = 90
+LOOKBACK_DAYS_BY_FREQ = {
+    '1m': 7,
+    '5m': 21,
+    '15m': 45,
+    '30m': 90,
+    '1h': 180,
+    '2h': 240,
+    '4h': 365,
+    '1d': 720,
+    '1w': 3650,
+}
+MIN_BARS_BY_FREQ = {
+    '1m': 200,
+    '5m': 200,
+    '15m': 160,
+    '30m': 120,
+    '1h': 120,
+    '2h': 100,
+    '4h': 80,
+    '1d': 80,
+    '1w': 52,
+}
 
 
 # ══════════════════════════════════════════════════
 # 数据获取
 # ══════════════════════════════════════════════════
+
+def lookback_days_for(freq_key: str) -> int:
+    return LOOKBACK_DAYS_BY_FREQ.get(freq_key, LOOKBACK_DAYS)
+
+
+def min_bars_for(freq_key: str) -> int:
+    return MIN_BARS_BY_FREQ.get(freq_key, 120)
+
 
 def fetch_bars(symbol: str, freq_key: str) -> tuple:
     """拉取 K 线并转换为 czsc RawBar"""
@@ -57,7 +87,7 @@ def fetch_bars(symbol: str, freq_key: str) -> tuple:
     freq = FREQ_MAP[freq_key]
     edt_dt = datetime.now() + timedelta(days=1)
     edt = edt_dt.strftime('%Y%m%d')
-    sdt = (edt_dt - timedelta(days=LOOKBACK_DAYS)).strftime('%Y%m%d')
+    sdt = (edt_dt - timedelta(days=lookback_days_for(freq_key))).strftime('%Y%m%d')
     
     df = get_raw_bars(symbol, period, sdt=sdt, edt=edt)
     bars = format_standard_kline(df, freq)
@@ -70,12 +100,15 @@ def fetch_bars(symbol: str, freq_key: str) -> tuple:
 
 class FreqAnalysis:
     """单级别缠论分析"""
-    def __init__(self, symbol: str, freq_key: str):
+    def __init__(self, symbol: str, freq_key: str, fetched: Optional[tuple] = None):
         self.symbol = symbol
         self.freq_key = freq_key
         self.freq = FREQ_MAP[freq_key]
         
-        bars, freq_val, n_klines = fetch_bars(symbol, freq_key)
+        bars, freq_val, n_klines = fetched if fetched is not None else fetch_bars(symbol, freq_key)
+        min_bars = min_bars_for(freq_key)
+        if len(bars) < min_bars:
+            raise ValueError(f"{freq_key} K线不足: {len(bars)} < {min_bars}")
         self.bars: List[RawBar] = bars
         self.n_klines = n_klines
         self.c = CZSC(bars, max_bi_num=50)
@@ -252,13 +285,13 @@ class FreqAnalysis:
 
 class MultiFreqAnalysis:
     """多级别缠论联立分析"""
-    def __init__(self, symbol: str, freq_keys: List[str]):
+    def __init__(self, symbol: str, freq_keys: List[str], fetched: Optional[Dict[str, tuple]] = None):
         self.symbol = symbol
         self.freq_keys = freq_keys
         self.analyses: Dict[str, FreqAnalysis] = {}
         
         for fk in freq_keys:
-            self.analyses[fk] = FreqAnalysis(symbol, fk)
+            self.analyses[fk] = FreqAnalysis(symbol, fk, fetched=(fetched or {}).get(fk))
     
     def resonance_check(self) -> str:
         """检查多级别共振 — 笔方向 + 中枢位置 + 嵌套关系"""
@@ -422,7 +455,8 @@ class MultiFreqAnalysis:
         lines = []
         lines.append(f"# {self.symbol} 缠论多级别分析报告")
         lines.append(f"**时间**: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        lines.append(f"**数据范围**: 近{LOOKBACK_DAYS}天")
+        ranges = ', '.join(f"{fk}=近{lookback_days_for(fk)}天" for fk in self.freq_keys)
+        lines.append(f"**数据范围**: {ranges}")
         lines.append("")
         
         # 摘要
@@ -485,7 +519,7 @@ class MultiFreqAnalysis:
         lines.append(f"- 方向判断: _根据共振+信号综合判断_")
         lines.append(f"- 关键支撑: _中枢下沿_")
         lines.append(f"- 关键阻力: _中枢上沿_")
-        lines.append(f"- 风险提示: 本报告由 czsc v1.0.0rc8 自动生成，仅供参考")
+        lines.append(f"- 风险提示: 本报告基于 czsc v1.0.0rc8 结构计算与 Hermes 启发式摘要自动生成，仅供参考")
         
         content = '\n'.join(lines)
         if outfile:
@@ -583,13 +617,16 @@ def main():
     
     # 数据
     print(f"标的: {symbol} | 级别: {', '.join(freqs)}")
-    
+    fetched = {}
     for fk in freqs:
         bars, freq, n = fetch_bars(symbol, fk)
-        print(f"  {fk}: {n} 条 K 线")
+        fetched[fk] = (bars, freq, n)
+        min_bars = min_bars_for(fk)
+        status = "OK" if len(bars) >= min_bars else f"不足 {len(bars)} < {min_bars}"
+        print(f"  {fk}: {n} 条 K 线 ({status}, 回看{lookback_days_for(fk)}天)")
     
     # 分析
-    mfa = MultiFreqAnalysis(symbol, freqs)
+    mfa = MultiFreqAnalysis(symbol, freqs, fetched=fetched)
     mfa.print_summary(show_signals=do_signals)
     
     # 图表

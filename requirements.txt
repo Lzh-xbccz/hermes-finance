@@ -1,8 +1,8 @@
 # hermes-finance 依赖
 # 注意: czsc 需要从 GitHub 源码安装（PyPI 的 0.10.x 是旧版 Python 实现，不含 Rust 核心）
-# pip install git+https://github.com/waditu/czsc.git
+# pip install git+https://github.com/waditu/czsc.git@c7d63edb76d97388aacdbd139b11f16a0e4dc57c
 
-czsc @ git+https://github.com/waditu/czsc.git
+czsc @ git+https://github.com/waditu/czsc.git@c7d63edb76d97388aacdbd139b11f16a0e4dc57c
 ccxt>=4.5.0
 pandas>=2.0.0
 plotly>=5.0.0

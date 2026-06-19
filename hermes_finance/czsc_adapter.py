@@ -8,6 +8,13 @@ from typing import Any
 
 FREQ_ORDER = {"1w": 0, "1d": 1, "4h": 2, "1h": 3, "15m": 4}
 DEFAULT_MARKET_FREQS = ["4h", "1d"]  # fallback only
+MIN_BARS_BY_FREQ = {
+    "15m": 80,
+    "1h": 80,
+    "4h": 60,
+    "1d": 60,
+    "1w": 52,
+}
 
 from .freq_presets import get_freqs as _get_preset_freqs
 
@@ -15,7 +22,6 @@ from .freq_presets import get_freqs as _get_preset_freqs
 def _default_freqs_for(market: str | None) -> list[str]:
     """根据当前交易频段返回市场默认缠论周期。"""
     return _get_preset_freqs(str(market or "crypto"))
-MIN_BARS = 20
 
 SIGNAL_DEFS = {
     "一买": "cxt_first_buy_V221126",
@@ -55,15 +61,16 @@ def analyze_market_klines(
     except Exception as exc:  # pragma: no cover - depends on optional runtime
         return _unavailable(market, symbol, f"czsc import failed: {exc}", source)
 
-    freq_map = {"15m": Freq.F15, "1h": Freq.F60, "4h": Freq.F240, "1d": Freq.D}
+    freq_map = {"15m": Freq.F15, "1h": Freq.F60, "4h": Freq.F240, "1d": Freq.D, "1w": Freq.W}
     analyses: dict[str, dict[str, Any]] = {}
     errors: dict[str, str] = {}
     target_symbol = symbol or str(data.get("symbol") or data.get("ticker") or market).upper()
 
     for freq, rows in selected.items():
         bars = _rows_to_raw_bars(rows, symbol=target_symbol, freq=freq_map[freq], RawBar=RawBar)
-        if len(bars) < MIN_BARS:
-            errors[freq] = f"insufficient bars: {len(bars)} < {MIN_BARS}"
+        min_bars = _min_bars_for(freq)
+        if len(bars) < min_bars:
+            errors[freq] = f"insufficient bars: {len(bars)} < {min_bars}"
             continue
         try:
             c = CZSC(bars, max_bi_num=50)
@@ -160,6 +167,10 @@ def _normalize_freqs(freqs: str | list[str] | None, *, market: str | None = None
         if freq in FREQ_ORDER and freq not in selected:
             selected.append(freq)
     return selected or default[:]
+
+
+def _min_bars_for(freq: str) -> int:
+    return MIN_BARS_BY_FREQ.get(freq, 80)
 
 
 def _rows_to_raw_bars(rows: list[dict[str, Any]], *, symbol: str, freq: Any, RawBar: Any) -> list[Any]:
