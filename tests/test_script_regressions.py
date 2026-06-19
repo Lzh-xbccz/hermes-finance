@@ -56,7 +56,7 @@ class ScriptRegressionTests(unittest.TestCase):
                 symbol, freqs, do_chart, do_signals, do_report = module.parse_args()
 
         self.assertEqual(symbol, "BTCUSDT")
-        self.assertEqual(freqs, ["4h", "15m"])
+        self.assertEqual(freqs, ["1h", "15m"])
         self.assertFalse(do_chart)
         self.assertTrue(do_signals)
         self.assertTrue(do_report)

@@ -3,7 +3,7 @@
 czsc 缠论多级别分析
 
 用法:
-    python3 czsc_analyze.py BTCUSDT                    # 默认 4H+15min 联立
+    python3 czsc_analyze.py BTCUSDT                    # 默认 1H+15min 联立（短线优化）
     python3 czsc_analyze.py BTCUSDT 4h,1h,15m          # 自定义多级别
     python3 czsc_analyze.py BTCUSDT --signals --chart --report
 

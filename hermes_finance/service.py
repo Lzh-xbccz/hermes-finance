@@ -142,7 +142,7 @@ def fetch_market_data(
 def czsc_analyze(
     symbol: str,
     *,
-    freqs: str | list[str] = "4h,15m",
+    freqs: str | list[str] = "1h,15m",
     chart: bool = False,
     report: bool = True,
     timeout: int = 240,

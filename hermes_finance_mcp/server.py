@@ -119,7 +119,7 @@ def analyze_a_share(symbol: str | None = None, remote: str | None = None, timeou
 @mcp.tool()
 def czsc_analyze_tool(
     symbol: str,
-    freqs: str = "4h,15m",
+    freqs: str = "1h,15m",
     chart: bool = False,
     report: bool = True,
     timeout: int = 240,
@@ -216,7 +216,7 @@ def crypto_eight_dimension_analysis(symbol: str) -> str:
 
 Required procedure:
 1. Call analyze_crypto(symbol="{symbol}", blocks="all", with_czsc=true).
-2. If CZSC details are missing or stale, call czsc_analyze_tool(symbol="{symbol}USDT", freqs="4h,15m").
+2. If CZSC details are missing or stale, call czsc_analyze_tool(symbol="{symbol}USDT", freqs="1h,15m").
 3. Read finance://framework/crypto and follow it strictly.
 
 Required output:
@@ -246,7 +246,7 @@ Do not answer with only price, contracts, macro, or CZSC. CZSC is confirmation o
 def czsc_confirmation_review(symbol: str) -> str:
     """Create a prompt for reviewing CZSC confirmation only."""
 
-    return f"""Run czsc_analyze_tool for {symbol} with freqs="4h,15m".
+    return f"""Run czsc_analyze_tool for {symbol} with freqs="1h,15m".
 
 Summarize:
 - last BI direction and strength by frequency

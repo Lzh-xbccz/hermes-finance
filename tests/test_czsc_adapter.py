@@ -35,7 +35,7 @@ class CzscAdapterTests(unittest.TestCase):
         self.assertEqual(len(rows["1d"]), 1)
 
     def test_futures_default_freqs_are_short_term(self) -> None:
-        self.assertEqual(_normalize_freqs(None, market="futures"), ["4h", "15m"])
+        self.assertEqual(_normalize_freqs(None, market="futures"), ["1h", "15m"])
 
     def test_a_share_default_freqs_stay_daily(self) -> None:
         self.assertEqual(_normalize_freqs(None, market="a_share"), ["1d"])

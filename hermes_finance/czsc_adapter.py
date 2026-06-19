@@ -9,7 +9,7 @@ from typing import Any
 FREQ_ORDER = {"1d": 1, "4h": 2, "1h": 3, "15m": 4}
 DEFAULT_MARKET_FREQS = ["4h", "1d"]
 DEFAULT_FREQS_BY_MARKET = {
-    "futures": ["4h", "15m"],
+    "futures": ["1h", "15m"],
     "a_share": ["1d"],
 }
 MIN_BARS = 20

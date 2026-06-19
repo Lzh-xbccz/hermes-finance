@@ -4,7 +4,7 @@
   Multi-freq CZSC + Signals + Dark Charts + Auto Report
 
 用法:
-  python czsc_analyze.py BTCUSDT                    # 默认 4H+15min 联立
+  python czsc_analyze.py BTCUSDT                    # 默认 1H+15min 联立（短线优化）
   python czsc_analyze.py BTCUSDT --freqs 4h,1h,15m  # 自定义多级别
   python czsc_analyze.py BTCUSDT --signals --chart --report
 """
@@ -43,7 +43,7 @@ SIGNAL_DEFS = {
     '笔结束': 'cxt_bi_end_V230104',
 }
 
-DEFAULT_FREQS = ['4h', '15m']
+DEFAULT_FREQS = ['1h', '15m']
 LOOKBACK_DAYS = 90
 
 
