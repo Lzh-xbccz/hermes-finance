@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## v1.2.4 (2026-06-19) — 技术结构逻辑图
+
+### 新增
+
+- 新增 `docs/TECHNICAL_ARCHITECTURE.md`，用 Mermaid 展示 Crypto 4H 市场架构识别逻辑。
+- 文档说明从 K 线归一化、摆点识别、通道/箱体/楔形分类、上下轨投影，到技术维度归并和七维门槛的完整路径。
+- README 增加技术结构逻辑图入口。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py tests/test_direction_gates.py`
+- `python3 -m unittest discover -s tests`
+
 ## v1.2.3 (2026-06-19) — Crypto 市场架构层
 
 ### 新增
