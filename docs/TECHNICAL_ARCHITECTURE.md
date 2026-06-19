@@ -12,8 +12,11 @@ flowchart TD
     C -- Yes --> D[Detect swing highs and swing lows]
 
     D --> E[Build multiple swing-window candidates]
+    D --> E1[Build foundation-low trendline candidate]
     E --> F[Score parent structures by coverage, freshness, price containment]
+    E1 --> F1[Prefer key low with later higher lows]
     F --> G{Structure Type}
+    F1 --> G
 
     G -- Higher highs + higher lows --> G1[Ascending channel]
     G -- Lower highs + lower lows --> G2[Descending channel]

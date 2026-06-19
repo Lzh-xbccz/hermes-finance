@@ -817,7 +817,7 @@ def _candidate_width_pct(rows, start_idx, end_idx):
     return (high - low) / max(low, 0.01) * 100
 
 
-def _architecture_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
+def _architecture_candidate(rows, highs, lows, end_idx, current, threshold=1.0, mode='摆点窗口', score_bonus=0.0):
     if len(highs) < 2 or len(lows) < 2:
         return None
     start_idx = min(highs[0]['idx'], lows[0]['idx'])
@@ -853,6 +853,7 @@ def _architecture_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
         + count * 4.0
         + min(abs(high_slope) + abs(low_slope), 60.0) * 0.35
         + kind_bonus
+        + score_bonus
         - freshness * 0.25
         - outside * 60.0
         - parallel_penalty
@@ -870,7 +871,48 @@ def _architecture_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
         'count': count,
         'score': score,
         'ratio': ratio,
+        'mode': mode,
     }
+
+
+def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
+    if len(highs) < 2 or len(lows) < 3:
+        return None
+    candidates = []
+    for start in lows[:-2]:
+        later_lows = [p for p in lows if p['idx'] > start['idx']]
+        later_highs = [p for p in highs if p['idx'] > start['idx']]
+        if len(later_lows) < 2 or len(later_highs) < 2:
+            continue
+        if start['price'] > min(p['price'] for p in lows):
+            continue
+        if later_lows[-1]['price'] <= start['price'] * 1.08:
+            continue
+        trend_lows = [start] + later_lows
+        trend_highs = later_highs
+        cand = _architecture_candidate(
+            rows,
+            trend_highs,
+            trend_lows,
+            end_idx,
+            current,
+            threshold,
+            mode='底部趋势线',
+            score_bonus=35.0,
+        )
+        if not cand or cand['kind'] not in {'上升通道', '扩散震荡'}:
+            continue
+        support = min(cand['upper'], cand['lower'])
+        resistance = max(cand['upper'], cand['lower'])
+        span = max(resistance - support, current * 0.005, 0.01)
+        support_buffer = max(current * 0.025, span * 0.20)
+        if current < support - support_buffer:
+            continue
+        cand['score'] += max(0, cand['last_anchor_idx'] - cand['start_idx']) * 0.35
+        candidates.append(cand)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda x: (x['score'], x['start_idx'] * -1))
 
 
 def _select_architecture_candidate(rows, swings, end_idx, current, threshold=1.0):
@@ -893,6 +935,9 @@ def _select_architecture_candidate(rows, swings, end_idx, current, threshold=1.0
         )
         if cand:
             candidates.append(cand)
+    foundation = _foundation_trend_candidate(rows, all_highs, all_lows, end_idx, current, threshold)
+    if foundation:
+        candidates.append(foundation)
     if not candidates:
         return None, None
     selected = max(candidates, key=lambda x: (x['score'], x['count'], x['last_anchor_idx']))
@@ -949,6 +994,7 @@ def _crypto_market_architecture(rows):
         upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
         lower_line = _architecture_line(lows, lows[0]['idx'], end_idx, lower)
         start_idx = selected['start_idx']
+        mode = selected.get('mode', '摆点窗口')
     else:
         highs = swings['highs'][-4:]
         lows = swings['lows'][-4:]
@@ -960,6 +1006,7 @@ def _crypto_market_architecture(rows):
         lower = recent_low
         upper_line = _architecture_line([], start_idx, end_idx, upper)
         lower_line = _architecture_line([], start_idx, end_idx, lower)
+        mode = '区间高低点'
 
     if lower > upper:
         lower, upper = upper, lower
@@ -1001,7 +1048,11 @@ def _crypto_market_architecture(rows):
         {'step': '触发', 'detail': f'上破 {_fmt_level(upper_breakout)} / 下破 {_fmt_level(lower_breakdown)}'},
     ]
     if selected:
-        logic.insert(1, {'step': '起点', 'detail': f'结构线从第{start_idx}根K线附近的有效摆点开始，不向更早窗口反推'})
+        if mode == '底部趋势线':
+            start_detail = f'底部趋势线从第{start_idx}根K线的关键低点开始，优先连接后续抬高的摆低'
+        else:
+            start_detail = f'结构线从第{start_idx}根K线附近的有效摆点开始，不向更早窗口反推'
+        logic.insert(1, {'step': '起点', 'detail': start_detail})
     if selected and recent_probe and recent_probe['kind'] != kind:
         logic.insert(
             3,
@@ -1025,6 +1076,7 @@ def _crypto_market_architecture(rows):
         'high_slope_pct': high_slope,
         'low_slope_pct': low_slope,
         'structure_start_idx': int(start_idx),
+        'structure_mode': mode,
         'logic': logic,
         'reason': reason,
     }

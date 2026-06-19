@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v1.2.7 (2026-06-19) — Crypto 底部趋势线优先
+
+### 修复
+
+- 修正 ZEC 这类 V 型低点后进入上升结构时，父级上升通道仍被截短到后半段的问题。
+- 新增底部趋势线候选：当关键低点后出现连续抬高摆低时，优先从该底部开始连接下轨。
+- 架构逻辑面板新增 `底部趋势线` 模式说明，明确短线回调不覆盖父级起涨结构。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.6 (2026-06-19) — Crypto 市场架构趋势修复
 
 ### 修复

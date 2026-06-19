@@ -78,6 +78,41 @@ def rising_channel_then_pullback_rows() -> list[dict[str, float | int | str]]:
     return rows
 
 
+def rising_channel_from_capitulation_low_rows() -> list[dict[str, float | int | str]]:
+    rows = []
+    lows = {
+        36: 250.0,
+        44: 336.0,
+        56: 414.0,
+        68: 422.0,
+        80: 440.0,
+    }
+    highs = {
+        40: 460.0,
+        52: 470.0,
+        60: 500.0,
+        72: 544.0,
+        84: 477.0,
+    }
+    for i in range(88):
+        base_low = 390 + i * 0.8
+        low = lows.get(i, base_low)
+        high = highs.get(i, low + 12)
+        if high <= low:
+            high = low + 12
+        close = low + (high - low) * 0.58
+        rows.append({
+            "ts": 1717545600 + i * 14400,
+            "time_utc": f"2026-06-{(i // 6) + 5:02d} {(i % 6) * 4:02d}:00",
+            "open": close - 0.3,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": 1000 + i,
+        })
+    return rows
+
+
 class DirectionGateTests(unittest.TestCase):
     def test_futures_requires_multidimension_confirmation(self) -> None:
         mod = load_module(
@@ -575,6 +610,21 @@ class DirectionGateTests(unittest.TestCase):
         self.assertIn("最近4组摆点=下降通道", "；".join(item["detail"] for item in arch["logic"]))
         self.assertEqual(arch["upper_line"]["points"][0]["idx"], arch["upper_line"]["anchors"][0]["idx"])
         self.assertEqual(arch["lower_line"]["points"][0]["idx"], arch["lower_line"]["anchors"][0]["idx"])
+
+    def test_crypto_market_architecture_prefers_foundation_low_trendline(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_foundation",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = rising_channel_from_capitulation_low_rows()
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["kind"], "上升通道")
+        self.assertEqual(arch["structure_mode"], "底部趋势线")
+        self.assertEqual(arch["lower_line"]["anchors"][0]["idx"], 36)
+        self.assertEqual(arch["lower_line"]["points"][0]["idx"], 36)
+        self.assertIn("底部趋势线", "；".join(item["detail"] for item in arch["logic"]))
 
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(
