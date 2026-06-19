@@ -827,9 +827,9 @@ def _active_envelope_chain(chain, side, role='parent', direction_slope=0.0):
         extreme_pos = max(range(len(chain)), key=lambda i: chain[i]['price'])
         if role == 'subtrend' and extreme_pos < len(chain) - 1:
             return chain[extreme_pos:]
-        if role == 'parent' and 0 < extreme_pos < len(chain) - 1 and direction_slope >= 0:
-            return chain[:extreme_pos + 1]
-        if role == 'parent' and 0 < extreme_pos < len(chain) - 1 and direction_slope < 0:
+        if role == 'parent' and 0 < extreme_pos < len(chain) - 1:
+            if direction_slope >= 0 or _swing_slope_pct([chain[0], chain[-1]]) > 1.0:
+                return chain[:extreme_pos + 1]
             return chain[extreme_pos:]
         return chain
 

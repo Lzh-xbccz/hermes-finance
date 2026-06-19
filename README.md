@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.2.12-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.2.13-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 让 AI 帮你分析金融市场。喊一声"分析 BTC"，自动拉行情、合约、链上、宏观数据，八维过一遍，过不了方向质量门槛就说观望，过得去才给多空。
@@ -196,6 +196,8 @@ hermes-finance/
 完整日志见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 技术结构逻辑图和 HTML 形态图说明见 [docs/TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md)。
+
+**v1.2.13** — Crypto 趋势矩阵补强：扩散震荡遇到主高点后回调时保留父级上轨延伸，真正下降反转仍走峰值后下降链
 
 **v1.2.12** — Crypto 形态图轨道改为直线延伸：父级上轨不再被 6/16 后 lower-high 折下去，回调链作为子趋势绘制
 

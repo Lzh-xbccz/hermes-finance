@@ -150,4 +150,5 @@ The visual chart draws:
 - Swing high and swing low anchor markers used by the structure detector.
 - Breakout and breakdown trigger lines based on the same buffer used by the text analysis.
 - A subtrend layer when recent swing pairs form a smaller countertrend channel inside the parent structure.
+- For expanding structures, a pullback lower-high after the main high does not cancel the parent upper rail if that lower-high still remains above the starting high; true downtrends still use the peak-to-lower-high chain.
 - A side panel with structure type, current location, stance, rail prices, and step-by-step logic.

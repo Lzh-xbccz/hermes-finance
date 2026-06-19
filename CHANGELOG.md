@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## v1.2.13 (2026-06-19) — Crypto 趋势矩阵补强
+
+### 修复
+
+- 补齐扩散震荡边界：主高点后出现 lower-high 回调、但回调高点仍高于起始高点时，父级上轨继续按扩散/上行高线延伸。
+- 真正下降反转仍使用峰值后的 lower-high 下降链，避免把下降通道误画成扩散震荡。
+- 新增趋势矩阵回归测试，覆盖上升通道、下降通道、收敛楔形、扩散震荡和主趋势后接子趋势的边界。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py BTC`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.12 (2026-06-19) — Crypto 轨道直线延伸
 
 ### 修复

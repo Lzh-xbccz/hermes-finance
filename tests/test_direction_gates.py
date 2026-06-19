@@ -720,6 +720,48 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual([p["idx"] for p in subtrend["anchors"]], [5, 15])
         self.assertLess(subtrend["points"][-1]["price"], subtrend["anchors"][-1]["price"])
 
+    def test_crypto_market_architecture_expanding_parent_keeps_upper_extension(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_expanding_parent",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        highs = [
+            {"idx": 0, "price": 100.0},
+            {"idx": 8, "price": 130.0},
+            {"idx": 15, "price": 118.0},
+        ]
+        lows = [
+            {"idx": 0, "price": 105.0},
+            {"idx": 8, "price": 88.0},
+            {"idx": 15, "price": 80.0},
+        ]
+
+        upper = mod._architecture_envelope_line(highs, 18, "upper", 0, role="parent", direction_slope=-3.0)
+        lower = mod._architecture_envelope_line(lows, 18, "lower", 0, role="parent", direction_slope=-3.0)
+        high_slope = mod._architecture_line_slope_pct(upper)
+        low_slope = mod._architecture_line_slope_pct(lower)
+
+        self.assertEqual([p["idx"] for p in upper["anchors"]], [0, 8])
+        self.assertGreater(high_slope, 1.0)
+        self.assertLess(low_slope, -1.0)
+        self.assertEqual(mod._architecture_kind(high_slope, low_slope, 30), "扩散震荡")
+
+    def test_crypto_market_architecture_downtrend_parent_uses_peak_tail(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_downtrend_parent",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        highs = [
+            {"idx": 0, "price": 130.0},
+            {"idx": 8, "price": 140.0},
+            {"idx": 15, "price": 100.0},
+        ]
+
+        upper = mod._architecture_envelope_line(highs, 18, "upper", 0, role="parent", direction_slope=-3.0)
+
+        self.assertEqual([p["idx"] for p in upper["anchors"]], [8, 15])
+        self.assertLess(upper["points"][-1]["price"], upper["anchors"][-1]["price"])
+
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(
             "crypto_fetch_market_architecture_dimension",
