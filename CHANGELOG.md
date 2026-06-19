@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## v1.2.12 (2026-06-19) — Crypto 轨道直线延伸
+
+### 修复
+
+- 市场架构图的上轨/下轨改为直线趋势线延伸，外沿摆点只用于确认锚点，不再逐点连成折线。
+- 主结构上轨遇到 6/16 后这类 lower-high 回调链时，继续延伸父级高线；回调 lower-high 单独作为子趋势绘制。
+- BTC 当前结构重新识别为父级上升通道 + 子趋势下降通道，避免主上轨被短线回调点向下折。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py BTC`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.11 (2026-06-19) — Crypto 外沿包络线
 
 ### 修复

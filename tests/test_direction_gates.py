@@ -696,6 +696,29 @@ class DirectionGateTests(unittest.TestCase):
 
         self.assertEqual([p["idx"] for p in upper["anchors"]], [0, 10])
         self.assertEqual([p["idx"] for p in lower["anchors"]], [0, 10])
+        self.assertEqual(len(upper["points"]), 2)
+        self.assertEqual(len(lower["points"]), 2)
+
+    def test_crypto_market_architecture_parent_upper_extends_after_peak(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_peak_extension",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        highs = [
+            {"idx": 0, "price": 100.0},
+            {"idx": 5, "price": 120.0},
+            {"idx": 10, "price": 112.0},
+            {"idx": 15, "price": 105.0},
+        ]
+
+        parent = mod._architecture_envelope_line(highs, 18, "upper", 0, role="parent", direction_slope=2.0)
+        subtrend = mod._architecture_envelope_line(highs, 18, "upper", 0, role="subtrend")
+
+        self.assertEqual([p["idx"] for p in parent["anchors"]], [0, 5])
+        self.assertEqual([p["idx"] for p in parent["points"]], [0, 18])
+        self.assertGreater(parent["points"][-1]["price"], parent["anchors"][-1]["price"])
+        self.assertEqual([p["idx"] for p in subtrend["anchors"]], [5, 15])
+        self.assertLess(subtrend["points"][-1]["price"], subtrend["anchors"][-1]["price"])
 
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(

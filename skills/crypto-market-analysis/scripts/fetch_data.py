@@ -792,24 +792,6 @@ def _architecture_line(points, start_idx, end_idx, fallback):
     }
 
 
-def _architecture_polyline(points, end_idx, fallback):
-    fallback = float(fallback or 0.0)
-    if len(points) < 2:
-        return _architecture_line(points, 0, end_idx, fallback)
-    anchors = [{'idx': int(p['idx']), 'price': float(p['price'])} for p in points]
-    line_points = list(anchors)
-    if line_points[-1]['idx'] < end_idx:
-        end_price = _project_line(points[-2:], end_idx)
-        line_points.append({
-            'idx': int(end_idx),
-            'price': float(end_price if end_price is not None else fallback),
-        })
-    return {
-        'points': line_points,
-        'anchors': anchors,
-    }
-
-
 def _cross(a, b, c):
     return (b['idx'] - a['idx']) * (c['price'] - a['price']) - (b['price'] - a['price']) * (c['idx'] - a['idx'])
 
@@ -838,12 +820,47 @@ def _envelope_chain(points, side):
     return hull if len(hull) >= 2 else deduped[-2:]
 
 
-def _architecture_envelope_line(points, end_idx, side, fallback):
+def _active_envelope_chain(chain, side, role='parent', direction_slope=0.0):
+    if len(chain) <= 2:
+        return chain
+    if side == 'upper':
+        extreme_pos = max(range(len(chain)), key=lambda i: chain[i]['price'])
+        if role == 'subtrend' and extreme_pos < len(chain) - 1:
+            return chain[extreme_pos:]
+        if role == 'parent' and 0 < extreme_pos < len(chain) - 1 and direction_slope >= 0:
+            return chain[:extreme_pos + 1]
+        if role == 'parent' and 0 < extreme_pos < len(chain) - 1 and direction_slope < 0:
+            return chain[extreme_pos:]
+        return chain
+
+    extreme_pos = min(range(len(chain)), key=lambda i: chain[i]['price'])
+    if role == 'subtrend' and 0 < extreme_pos < len(chain) - 1:
+        return chain[:extreme_pos + 1]
+    if role == 'parent' and 0 < extreme_pos < len(chain) - 1 and direction_slope >= 0:
+        return chain[extreme_pos:]
+    if role == 'parent' and 0 < extreme_pos < len(chain) - 1 and direction_slope < 0:
+        return chain[:extreme_pos + 1]
+    return chain
+
+
+def _architecture_envelope_line(points, end_idx, side, fallback, role='parent', direction_slope=0.0):
     fallback = float(fallback or 0.0)
     chain = _envelope_chain(points, side)
     if len(chain) < 2:
         return _architecture_line(points, 0, end_idx, fallback)
-    return _architecture_polyline(chain, end_idx, fallback)
+    active_chain = _active_envelope_chain(chain, side, role, direction_slope)
+    if len(active_chain) < 2:
+        active_chain = chain[-2:]
+    return _architecture_line(active_chain, active_chain[0]['idx'], end_idx, fallback)
+
+
+def _architecture_line_slope_pct(line):
+    points = line.get('points', [])
+    if len(points) < 2:
+        return 0.0
+    first, last = points[0], points[-1]
+    base = first.get('price') or 1.0
+    return (last.get('price', base) / base - 1) * 100
 
 
 def _architecture_kind(high_slope, low_slope, width_pct, threshold=1.0):
@@ -1002,8 +1019,8 @@ def _sub_structure_from_candidate(cand, end_idx, current):
         return None
     upper = cand['upper']
     lower = cand['lower']
-    upper_line = _architecture_envelope_line(cand['highs'], end_idx, 'upper', upper)
-    lower_line = _architecture_envelope_line(cand['lows'], end_idx, 'lower', lower)
+    upper_line = _architecture_envelope_line(cand['highs'], end_idx, 'upper', upper, role='subtrend')
+    lower_line = _architecture_envelope_line(cand['lows'], end_idx, 'lower', lower, role='subtrend')
     upper = upper_line['points'][-1]['price']
     lower = lower_line['points'][-1]['price']
     if lower > upper:
@@ -1105,12 +1122,15 @@ def _crypto_market_architecture(rows):
         kind = selected['kind']
         upper = selected['upper']
         lower = selected['lower']
-        upper_line = _architecture_envelope_line(highs, end_idx, 'upper', upper)
-        lower_line = _architecture_envelope_line(lows, end_idx, 'lower', lower)
-        upper = upper_line['points'][-1]['price']
-        lower = lower_line['points'][-1]['price']
         start_idx = selected['start_idx']
         mode = selected.get('mode', '摆点窗口')
+        upper_line = _architecture_envelope_line(highs, end_idx, 'upper', upper, role='parent', direction_slope=low_slope)
+        lower_line = _architecture_envelope_line(lows, end_idx, 'lower', lower, role='parent', direction_slope=low_slope)
+        upper = upper_line['points'][-1]['price']
+        lower = lower_line['points'][-1]['price']
+        high_slope = _architecture_line_slope_pct(upper_line)
+        low_slope = _architecture_line_slope_pct(lower_line)
+        kind = _architecture_kind(high_slope, low_slope, _candidate_width_pct(rows, start_idx, end_idx), threshold)
         if recent_probe and recent_probe['kind'] != kind:
             sub_structure = _sub_structure_from_candidate(recent_probe, end_idx, current)
     else:

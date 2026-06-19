@@ -32,9 +32,9 @@ flowchart TD
     G5 --> H
     G6 --> H
 
-    H --> H1[Draw rails from swing envelope anchors]
-    H1 --> H6[Foundation mode: upper rail uses main rising high chain]
-    H1 --> H7[Descending/wedge mode: upper rail uses lower-high chain]
+    H --> H1[Select swing envelope anchors]
+    H1 --> H6[Parent rail: draw one straight extension line]
+    H1 --> H7[Subtrend rail: draw pullback chain as separate line]
     D --> H2[Check latest 4 swing pairs]
     H2 --> H3{Latest structure conflicts with parent?}
     H3 -- Yes --> H4[Keep as drawable subtrend]
@@ -146,7 +146,7 @@ flowchart TD
 The visual chart draws:
 
 - Candlesticks and volume.
-- Upper rail / resistance, lower rail / support, and mid rail. Rails use envelope geometry: the upper rail follows the outer swing-high hull, and the lower rail follows the outer swing-low hull.
+- Upper rail / resistance, lower rail / support, and mid rail. Rails use envelope geometry to select anchors, then render one straight trendline extension instead of a point-by-point polyline.
 - Swing high and swing low anchor markers used by the structure detector.
 - Breakout and breakdown trigger lines based on the same buffer used by the text analysis.
 - A subtrend layer when recent swing pairs form a smaller countertrend channel inside the parent structure.
