@@ -523,17 +523,501 @@ def block_options(coin_id):
         tag = '🔴看跌' if pcr > 1.2 else '🟢看涨' if pcr < 0.8 else '⚪中性'
         print(f'24h Put/Call量比: {pcr:.2f} → {tag} | 总量:${(put_vol+call_vol)/1e6:,.0f}M')
 
+
+# ─── 块6: 独立维度方向门槛 ───
+def _to_float(value, default=None):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _row_value(row, key, alt=None):
+    if isinstance(row, dict):
+        return _to_float(row.get(key, row.get(alt)))
+    return None
+
+
+def _close(row):
+    return _row_value(row, 'close', 'c')
+
+
+def _high(row):
+    return _row_value(row, 'high', 'h')
+
+
+def _low(row):
+    return _row_value(row, 'low', 'l')
+
+
+def _open(row):
+    return _row_value(row, 'open', 'o')
+
+
+def _normalize_kline_rows(rows):
+    out = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            out.append(row)
+        elif isinstance(row, list) and len(row) >= 6:
+            out.append({
+                'ts': row[0],
+                'open': _to_float(row[1]),
+                'high': _to_float(row[2]),
+                'low': _to_float(row[3]),
+                'close': _to_float(row[4]),
+                'volume': _to_float(row[5], 0.0),
+            })
+    return [r for r in out if None not in {_open(r), _high(r), _low(r), _close(r)}]
+
+
+def _crypto_pattern(rows):
+    rows = _normalize_kline_rows(rows)
+    if len(rows) < 12:
+        return '数据不足'
+    closes = [_close(r) for r in rows]
+    highs = [_high(r) for r in rows]
+    lows = [_low(r) for r in rows]
+    chg = (closes[-1] / closes[0] - 1) * 100 if closes[0] else 0
+    recent = (closes[-1] / closes[-6] - 1) * 100 if closes[-6] else 0
+    width = (max(highs) - min(lows)) / min(lows) * 100 if min(lows) else 0
+    if abs(chg) < 5 and width < 14:
+        return '箱体洗盘'
+    if chg > 8 and recent > 1:
+        return '趋势推进'
+    if chg > 8 and recent < 0:
+        return '冲高派发'
+    if closes[-1] > min(lows[-6:]) * 1.02 and min(lows[-3:]) <= min(lows[-6:]) * 1.003:
+        return '跌破回收'
+    return '阴跌磨人'
+
+
+def _crypto_price_bias(daily, h4):
+    daily = _normalize_kline_rows(daily)
+    h4 = _normalize_kline_rows(h4)
+    if len(daily) < 20 or len(h4) < 8:
+        return '观望'
+    daily_up = _close(daily[-1]) > _close(daily[-20])
+    daily_down = _close(daily[-1]) < _close(daily[-20])
+    hl = _low(h4[-1]) > _low(h4[-3])
+    lh = _high(h4[-1]) < _high(h4[-3])
+    if daily_up and hl:
+        return '做多'
+    if daily_down and lh:
+        return '做空'
+    return '观望'
+
+
+def _crypto_dimension(reason):
+    if reason.startswith('技术结构') or '4H主导手法' in reason:
+        return '技术结构'
+    if reason.startswith(('合约', 'OI', '资金费率', '多空比')):
+        return '合约结构'
+    if reason.startswith(('VIX', 'DXY', 'SPY', 'BTC 5日', '宏观')):
+        return '宏观/风险偏好'
+    if reason.startswith(('恐惧贪婪', 'FNG')):
+        return '情绪反指'
+    if reason.startswith('交易所'):
+        return '交易所交叉验证'
+    if reason.startswith('期权'):
+        return '期权结构'
+    if reason.startswith('链上'):
+        return '链上/基本面'
+    return '其他'
+
+
+def _dimensionize_votes(votes, classifier):
+    buckets = {}
+    for side in ('做多', '做空'):
+        for reason in votes.get(side, []):
+            bucket = classifier(reason)
+            buckets.setdefault(bucket, {'做多': [], '做空': []})[side].append(reason)
+
+    collapsed = {
+        '做多': [],
+        '做空': [],
+        'neutral': list(votes.get('neutral', [])),
+        'veto': list(votes.get('veto', [])),
+        'veto_long': list(votes.get('veto_long', [])),
+        'veto_short': list(votes.get('veto_short', [])),
+        'missing': list(votes.get('missing', [])),
+        'dimensions': {},
+    }
+    for name, sides in buckets.items():
+        long_reasons = sides['做多']
+        short_reasons = sides['做空']
+        if long_reasons and not short_reasons:
+            collapsed['做多'].append(f"{name}: {'；'.join(long_reasons)}")
+            collapsed['dimensions'][name] = {'stance': '做多', 'reasons': long_reasons}
+        elif short_reasons and not long_reasons:
+            collapsed['做空'].append(f"{name}: {'；'.join(short_reasons)}")
+            collapsed['dimensions'][name] = {'stance': '做空', 'reasons': short_reasons}
+        else:
+            reason = '多空内部冲突：多(' + '；'.join(long_reasons) + ') / 空(' + '；'.join(short_reasons) + ')'
+            collapsed['neutral'].append(f'{name}: {reason}')
+            collapsed['dimensions'][name] = {'stance': '中性', 'reasons': long_reasons + short_reasons}
+    return collapsed
+
+
+def _contract_votes(data, votes):
+    contracts = data.get('contracts') or {}
+    if not contracts:
+        votes['missing'].append('合约结构')
+        return
+    price_chg = _to_float(contracts.get('price_change_pct_24h'))
+    oi_chg = _to_float(contracts.get('oi_60m_change_pct'))
+    funding = _to_float(contracts.get('latest_funding_rate'))
+    ls_ratio = _to_float(contracts.get('latest_long_short_ratio'))
+
+    if price_chg is not None and oi_chg is not None:
+        if price_chg > 1.0 and oi_chg > 0.3:
+            votes['做多'].append(f'合约增仓上涨 price={price_chg:+.2f}% OI={oi_chg:+.2f}%')
+        elif price_chg < -1.0 and oi_chg > 0.3:
+            votes['做空'].append(f'合约增仓下跌 price={price_chg:+.2f}% OI={oi_chg:+.2f}%')
+        elif abs(oi_chg) <= 0.3:
+            votes['neutral'].append(f'OI横盘 {oi_chg:+.2f}%')
+        else:
+            votes['neutral'].append(f'OI与价格未形成趋势确认 price={price_chg:+.2f}% OI={oi_chg:+.2f}%')
+
+    if funding is not None:
+        if funding >= 0.0003:
+            votes['veto_long'].append(f'资金费率 {funding * 100:+.4f}% 多头拥挤，禁止追多')
+        elif funding <= -0.0003:
+            votes['veto_short'].append(f'资金费率 {funding * 100:+.4f}% 空头拥挤，禁止追空')
+        elif funding > 0.00008:
+            votes['neutral'].append(f'资金费率偏正 {funding * 100:+.4f}%')
+        elif funding < -0.00008:
+            votes['neutral'].append(f'资金费率偏负 {funding * 100:+.4f}%')
+
+    if ls_ratio is not None:
+        if ls_ratio >= 2.5:
+            votes['veto_long'].append(f'多空比 {ls_ratio:.2f} 多头极端，禁止追多')
+        elif ls_ratio <= 0.7:
+            votes['veto_short'].append(f'多空比 {ls_ratio:.2f} 空头极端，禁止追空')
+        elif 1.2 <= ls_ratio <= 1.8:
+            votes['做多'].append(f'多空比 {ls_ratio:.2f} 温和偏多')
+        elif 0.8 <= ls_ratio <= 0.95:
+            votes['做空'].append(f'多空比 {ls_ratio:.2f} 温和偏空')
+
+
+def _macro_votes(data, votes):
+    macro = data.get('macro') or {}
+    if not macro:
+        votes['missing'].append('宏观/风险偏好')
+        return
+    spy_5d = _to_float(macro.get('spy_5d_change_pct'))
+    vix_price = _to_float(macro.get('vix_price'))
+    dxy_chg = _to_float(macro.get('dxy_change_pct'))
+    btc_5d = _to_float(macro.get('asset_5d_change_pct'))
+
+    if spy_5d is not None:
+        if spy_5d > 1:
+            votes['做多'].append(f'SPY 5日 {spy_5d:+.2f}% 风险偏好修复')
+        elif spy_5d < -1:
+            votes['做空'].append(f'SPY 5日 {spy_5d:+.2f}% 风险偏好走弱')
+    if vix_price is not None:
+        if vix_price >= 25:
+            votes['做空'].append(f'VIX={vix_price:.2f} 风险厌恶')
+        elif vix_price <= 15:
+            votes['做多'].append(f'VIX={vix_price:.2f} 波动率低位')
+    if dxy_chg is not None:
+        if dxy_chg > 0.5:
+            votes['做空'].append(f'DXY走强 {dxy_chg:+.2f}% 压制风险资产')
+        elif dxy_chg < -0.5:
+            votes['做多'].append(f'DXY走弱 {dxy_chg:+.2f}% 支撑风险资产')
+    if btc_5d is not None:
+        if btc_5d > 3:
+            votes['做多'].append(f'BTC 5日 {btc_5d:+.2f}% 内部风险偏好走强')
+        elif btc_5d < -3:
+            votes['做空'].append(f'BTC 5日 {btc_5d:+.2f}% 内部风险偏好走弱')
+
+
+def directional_evidence(data):
+    votes = {
+        '做多': [],
+        '做空': [],
+        'neutral': [],
+        'veto': [],
+        'veto_long': [],
+        'veto_short': [],
+        'missing': [],
+    }
+
+    daily = data.get('daily') or data.get('daily_90d') or []
+    h4 = data.get('h4') or data.get('agg_4h_30d') or data.get('agg_4h_10d') or []
+    tech = _crypto_price_bias(daily, h4)
+    if tech in {'做多', '做空'}:
+        votes[tech].append(f'技术结构={tech}')
+    else:
+        votes['missing'].append('技术结构')
+
+    pattern = _crypto_pattern(h4)
+    if pattern == '趋势推进':
+        votes['做多'].append('4H主导手法=趋势推进')
+    elif pattern in {'冲高派发', '阴跌磨人'}:
+        votes['做空'].append(f'4H主导手法={pattern}')
+    elif pattern in {'箱体洗盘', '跌破回收'}:
+        votes['neutral'].append(f'4H主导手法={pattern}')
+
+    _contract_votes(data, votes)
+    _macro_votes(data, votes)
+
+    sentiment = data.get('sentiment') or {}
+    fng = _to_float(sentiment.get('fear_greed'))
+    if fng is not None:
+        if fng >= 80:
+            votes['veto_long'].append(f'恐惧贪婪={fng:.0f} 极端贪婪，禁止追多')
+        elif fng <= 20:
+            votes['veto_short'].append(f'恐惧贪婪={fng:.0f} 极端恐惧，禁止追空')
+        elif fng < 35:
+            votes['做多'].append(f'恐惧贪婪={fng:.0f} 偏恐惧，反指偏多')
+        elif fng > 65:
+            votes['做空'].append(f'恐惧贪婪={fng:.0f} 偏贪婪，反指偏空')
+    else:
+        votes['missing'].append('情绪反指')
+
+    exchanges = data.get('exchanges') or {}
+    spread = _to_float(exchanges.get('spread_pct'))
+    if spread is not None:
+        if spread >= 0.2:
+            votes['veto'].append(f'交易所价差 {spread:.3f}% 偏离过大，禁止硬给方向')
+        else:
+            votes['neutral'].append(f'交易所价差 {spread:.3f}% 正常')
+
+    options = data.get('options') or {}
+    pcr = _to_float(options.get('put_call_ratio'))
+    if pcr is not None:
+        if pcr > 1.2:
+            votes['做空'].append(f'期权 Put/Call={pcr:.2f} 看跌需求占优')
+        elif pcr < 0.8:
+            votes['做多'].append(f'期权 Put/Call={pcr:.2f} 看涨需求占优')
+        else:
+            votes['neutral'].append(f'期权 Put/Call={pcr:.2f} 中性')
+
+    chain = data.get('chain') or {}
+    avg_tx_btc = _to_float(chain.get('avg_tx_btc'))
+    if avg_tx_btc is not None:
+        if avg_tx_btc >= 5:
+            votes['neutral'].append(f'链上大额转账活跃 avg={avg_tx_btc:.1f} BTC，需结合交易所流向')
+        else:
+            votes['neutral'].append(f'链上活跃度未见强方向 avg={avg_tx_btc:.1f} BTC')
+
+    return _dimensionize_votes(votes, _crypto_dimension)
+
+
+def direction_from_evidence(votes):
+    if votes.get('veto'):
+        return '观望'
+    missing_core = {'技术结构', '合约结构'} & set(votes.get('missing', []))
+    if missing_core:
+        return '观望'
+    long_count = len(votes['做多'])
+    short_count = len(votes['做空'])
+    if long_count >= 3 and long_count - short_count >= 2 and not votes.get('veto_long'):
+        return '做多'
+    if short_count >= 3 and short_count - long_count >= 2 and not votes.get('veto_short'):
+        return '做空'
+    return '观望'
+
+
+def direction_quality_text(votes):
+    return (
+        f"多头独立维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"空头独立维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"中性/缺失：{'; '.join(votes['neutral'] + votes.get('missing', [])) or '无'}；"
+        f"硬性降级：{'; '.join(votes['veto']) or '无'}；"
+        f"禁止追多：{'; '.join(votes.get('veto_long', [])) or '无'}；"
+        f"禁止追空：{'; '.join(votes.get('veto_short', [])) or '无'}"
+    )
+
+
+def counter_audit_text(final_direction, votes):
+    long_count = len(votes['做多'])
+    short_count = len(votes['做空'])
+    if votes.get('veto'):
+        return '存在硬性降级项，最终观望'
+    if {'技术结构', '合约结构'} & set(votes.get('missing', [])):
+        return '核心维度缺失，最终观望'
+    if final_direction == '观望' and votes.get('veto_long') and long_count > short_count:
+        return '多头证据虽占优，但合约/情绪存在禁止追多项，最终观望'
+    if final_direction == '观望' and votes.get('veto_short') and short_count > long_count:
+        return '空头证据虽占优，但合约/情绪存在禁止追空项，最终观望'
+    if final_direction == '做多':
+        return '最强空头证据：' + ('；'.join(votes['做空']) if votes['做空'] else '无同等级反证')
+    if final_direction == '做空':
+        return '最强多头证据：' + ('；'.join(votes['做多']) if votes['做多'] else '无同等级反证')
+    if long_count == short_count:
+        return '多空维度数量相同，方向质量不足，最终观望'
+    if abs(long_count - short_count) < 2:
+        return '多空维度差距小于 2 项，未通过方向质量门槛，最终观望'
+    return '同向维度少于 3 项，未形成可执行方向优势，最终观望'
+
+
+def _optional_fetch(url, timeout=10):
+    try:
+        return fetch(url, timeout)
+    except Exception:
+        return None
+
+
+def _latest_funding_rate(rows):
+    if not rows:
+        return None
+    latest = sorted(rows, key=lambda x: x.get('fundingTime', 0))[-1]
+    return _to_float(latest.get('fundingRate'))
+
+
+def _latest_long_short_ratio(rows):
+    if not rows:
+        return None
+    latest = sorted(rows, key=lambda x: x.get('timestamp', 0))[-1]
+    return _to_float(latest.get('longShortRatio'))
+
+
+def _oi_change(rows):
+    if not rows or len(rows) < 2:
+        return None
+    vals = [_to_float(x.get('sumOpenInterest')) for x in rows]
+    vals = [x for x in vals if x is not None]
+    if len(vals) < 2 or vals[0] == 0:
+        return None
+    return (vals[-1] / vals[0] - 1) * 100
+
+
+def _yf_snapshot(ticker):
+    import urllib.parse
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ticker)}?interval=1d&range=5d"
+    d = _optional_fetch(url)
+    try:
+        meta = d['chart']['result'][0]['meta']
+        price = _to_float(meta.get('regularMarketPrice'))
+        prev = _to_float(meta.get('chartPreviousClose'))
+        return {
+            'price': price,
+            'change_pct': (price / prev - 1) * 100 if price is not None and prev else None,
+        }
+    except (TypeError, KeyError, IndexError, ZeroDivisionError):
+        return {}
+
+
+def _series_change(rows, close_index=4, lookback=5):
+    if not rows or len(rows) < lookback:
+        return None
+    latest = _to_float(rows[-1][close_index] if isinstance(rows[-1], list) else _close(rows[-1]))
+    prior = _to_float(rows[-lookback][close_index] if isinstance(rows[-lookback], list) else _close(rows[-lookback]))
+    return (latest / prior - 1) * 100 if latest is not None and prior else None
+
+
+def _exchange_spread(coin_id):
+    symbol = market_symbol(coin_id)
+    prices = []
+    d = _optional_fetch(f'https://api.binance.com/api/v3/ticker/bookTicker?symbol={symbol}')
+    if d:
+        bid, ask = _to_float(d.get('bidPrice')), _to_float(d.get('askPrice'))
+        if bid and ask:
+            prices.append((bid + ask) / 2)
+    d = _optional_fetch(f'https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}')
+    if d and d.get('retCode') == 0 and d.get('result', {}).get('list'):
+        price = _to_float(d['result']['list'][0].get('lastPrice'))
+        if price:
+            prices.append(price)
+    d = _optional_fetch(f'https://www.okx.com/api/v5/market/ticker?instId={okx_inst_id(coin_id)}')
+    if d and d.get('code') == '0' and d.get('data'):
+        price = _to_float(d['data'][0].get('last'))
+        if price:
+            prices.append(price)
+    if len(prices) < 2 or min(prices) == 0:
+        return None
+    return (max(prices) - min(prices)) / min(prices) * 100
+
+
+def _option_put_call_ratio(coin_id):
+    if coin_id not in ('bitcoin', 'btc'):
+        return None
+    d = _optional_fetch('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option')
+    try:
+        put_vol = sum(_to_float(x.get('volume_usd'), 0) for x in d['result'] if x['instrument_name'].endswith('-P'))
+        call_vol = sum(_to_float(x.get('volume_usd'), 0) for x in d['result'] if x['instrument_name'].endswith('-C'))
+        return put_vol / call_vol if call_vol > 0 else None
+    except (TypeError, KeyError):
+        return None
+
+
+def collect_direction_snapshot(coin_id):
+    symbol = market_symbol(coin_id)
+    daily = _optional_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=90') or []
+    h4 = _optional_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=4h&limit=180') or []
+    ticker = _optional_fetch(f'https://fapi.binance.com/fapi/v1/ticker/24hr?symbol={symbol}') or {}
+    funding = _optional_fetch(f'https://fapi.binance.com/fapi/v1/fundingRate?symbol={symbol}&limit=5') or []
+    ls_ratio = _optional_fetch(f'https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol={symbol}&period=5m&limit=5') or []
+    oi_hist = _optional_fetch(f'https://fapi.binance.com/futures/data/openInterestHist?symbol={symbol}&period=5m&limit=12') or []
+
+    asset_5d = _series_change(daily, lookback=5)
+    spy_raw = _optional_fetch('https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&range=5d')
+    try:
+        spy_rows = [x for x in spy_raw['chart']['result'][0]['indicators']['quote'][0]['close'] if x is not None]
+        spy_5d = (spy_rows[-1] / spy_rows[-5] - 1) * 100 if len(spy_rows) >= 5 and spy_rows[-5] else None
+    except (TypeError, KeyError, IndexError, ZeroDivisionError):
+        spy_5d = None
+    vix = _yf_snapshot('^VIX')
+    time.sleep(0.4)
+    dxy = _yf_snapshot('DX-Y.NYB')
+
+    fng = _optional_fetch('https://api.alternative.me/fng/?limit=1') or {}
+    try:
+        fear_greed = _to_float(fng['data'][0]['value'])
+    except (TypeError, KeyError, IndexError):
+        fear_greed = None
+
+    return {
+        'symbol': symbol,
+        'daily': _normalize_kline_rows(daily),
+        'h4': _normalize_kline_rows(h4),
+        'contracts': {
+            'price_change_pct_24h': _to_float(ticker.get('priceChangePercent')),
+            'latest_funding_rate': _latest_funding_rate(funding),
+            'latest_long_short_ratio': _latest_long_short_ratio(ls_ratio),
+            'oi_60m_change_pct': _oi_change(oi_hist),
+        },
+        'macro': {
+            'asset_5d_change_pct': asset_5d,
+            'spy_5d_change_pct': spy_5d,
+            'vix_price': vix.get('price'),
+            'dxy_change_pct': dxy.get('change_pct'),
+        },
+        'sentiment': {'fear_greed': fear_greed},
+        'exchanges': {'spread_pct': _exchange_spread(coin_id)},
+        'options': {'put_call_ratio': _option_put_call_ratio(coin_id)},
+    }
+
+
+def block_direction_gate(coin_id):
+    print('=== 方向质量门槛（独立维度） ===')
+    data = collect_direction_snapshot(coin_id)
+    votes = directional_evidence(data)
+    direction = direction_from_evidence(votes)
+    label = '🟢 做多' if direction == '做多' else '🔴 做空' if direction == '做空' else '⚪ 观望'
+    print(f'最终方向建议: {label}')
+    print(direction_quality_text(votes))
+    print('反向审计: ' + counter_audit_text(direction, votes))
+    if direction == '观望':
+        print('执行结论: 当前不强行开仓，只给触发条件；CZSC 只能确认或降级，不能覆盖本门槛。')
+
+
 # ─── 主入口 ───
 BLOCKS = {
     'resolve': block_resolve, 'price': block_price, 'klines': block_klines,
     'chain': block_chain, 'contracts': block_contracts, 'exchanges': block_exchanges,
-    'sentiment': block_sentiment, 'macro': block_macro, 'options': block_options,
+    'sentiment': block_sentiment, 'macro': block_macro, 'direction': block_direction_gate,
+    'options': block_options,
 }
 
 # 按数据源分组（同源串行避免限流，异源并行加速）
 SOURCE_GROUPS = {
     'binance': ['klines', 'contracts', 'price', 'exchanges'],  # 全并行，限制宽松
-    'yahoo': ['macro'],                           # 内部不再调Yahoo
+    'yahoo': ['macro', 'direction'],              # direction 内含 Yahoo，和 macro 串行避免429
     'other': ['resolve', 'chain', 'sentiment', 'options'],  # 全并行
 }
 

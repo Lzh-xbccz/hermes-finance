@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.1.4-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.1.5-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 Hermes Finance 是一个给 **Claude Code、Codex、Cursor、Gemini、Cline、Roo、Continue、VS Code Copilot 等 AI 编程/研究工具** 使用的金融市场分析框架。它把行情采集、市场路由、八维分析、CZSC 缠论确认和 MCP/Skills 接入放在同一个仓库里，目标是让 AI 不再只给“涨跌摘要”，而是按统一证据链输出可复核的市场判断。
@@ -419,6 +419,13 @@ cd skills/a-share-market-analysis/sequoia && python3 main.py
 ## 📋 更新日志
 
 所有版本详见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+### v1.1.5 (2026-06-19) — Crypto 脚本级方向门槛
+
+- Crypto 新增 `direction` block，脚本直接输出独立维度方向门槛、反向审计和最终方向建议。
+- 合约 OI / 资金费率 / 多空比 / 合约涨跌只算 `合约结构` 一个维度。
+- SPY / VIX / DXY / BTC 5 日趋势只算 `宏观/风险偏好` 一个维度。
+- 极端拥挤和核心维度缺失会强制观望，并新增对应回归测试。
 
 ### v1.1.4 (2026-06-18) — 独立维度方向门槛
 

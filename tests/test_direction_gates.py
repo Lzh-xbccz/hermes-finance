@@ -283,6 +283,112 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(votes["做空"], [])
         self.assertTrue(any("EIA页面可用" in item for item in votes["neutral"]))
 
+    def test_crypto_contract_signals_count_as_one_dimension(self) -> None:
+        mod = load_module(
+            "crypto_fetch_direction_gate",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 2.0,
+                "oi_60m_change_pct": 0.8,
+                "latest_long_short_ratio": 1.6,
+                "latest_funding_rate": 0.00005,
+            },
+            "macro": {},
+            "sentiment": {},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(len(votes["做多"]), 1)
+        self.assertIn("合约结构", votes["做多"][0])
+        self.assertEqual(mod.direction_from_evidence(votes), "观望")
+
+    def test_crypto_macro_proxies_count_as_one_dimension(self) -> None:
+        mod = load_module(
+            "crypto_fetch_macro_dimension_gate",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = ohlc_rows(40, step=0.0)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 0.0,
+                "oi_60m_change_pct": 0.0,
+                "latest_long_short_ratio": 1.0,
+                "latest_funding_rate": 0.0,
+            },
+            "macro": {
+                "spy_5d_change_pct": 2.0,
+                "vix_price": 12.0,
+                "dxy_change_pct": -0.8,
+                "asset_5d_change_pct": 5.0,
+            },
+            "sentiment": {},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertEqual(len(votes["做多"]), 1)
+        self.assertIn("宏观/风险偏好", votes["做多"][0])
+        self.assertEqual(mod.direction_from_evidence(votes), "观望")
+
+    def test_crypto_extreme_funding_blocks_long_direction(self) -> None:
+        mod = load_module(
+            "crypto_fetch_funding_veto",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = ohlc_rows(40, step=1.0)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 2.0,
+                "oi_60m_change_pct": 0.8,
+                "latest_long_short_ratio": 1.4,
+                "latest_funding_rate": 0.0005,
+            },
+            "macro": {
+                "spy_5d_change_pct": 2.0,
+                "vix_price": 12.0,
+                "dxy_change_pct": -0.8,
+                "asset_5d_change_pct": 5.0,
+            },
+            "sentiment": {"fear_greed": 30},
+            "options": {"put_call_ratio": 0.6},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertGreaterEqual(len(votes["做多"]), 3)
+        self.assertTrue(votes["veto_long"])
+        self.assertEqual(mod.direction_from_evidence(votes), "观望")
+
+    def test_crypto_requires_core_dimensions(self) -> None:
+        mod = load_module(
+            "crypto_fetch_core_dimension_gate",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = ohlc_rows(40, step=1.0)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "macro": {
+                "spy_5d_change_pct": 2.0,
+                "vix_price": 12.0,
+                "dxy_change_pct": -0.8,
+                "asset_5d_change_pct": 5.0,
+            },
+            "sentiment": {"fear_greed": 30},
+            "options": {"put_call_ratio": 0.6},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertIn("合约结构", votes["missing"])
+        self.assertEqual(mod.direction_from_evidence(votes), "观望")
+
 
 if __name__ == "__main__":
     unittest.main()
