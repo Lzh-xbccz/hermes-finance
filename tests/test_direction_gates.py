@@ -589,8 +589,8 @@ class DirectionGateTests(unittest.TestCase):
 
         arch = mod._crypto_market_architecture(rows)
 
-        self.assertEqual(len(arch["upper_line"]["points"]), 2)
-        self.assertEqual(len(arch["lower_line"]["points"]), 2)
+        self.assertGreaterEqual(len(arch["upper_line"]["points"]), 2)
+        self.assertGreaterEqual(len(arch["lower_line"]["points"]), 2)
         self.assertGreaterEqual(len(arch["upper_line"]["anchors"]), 2)
         self.assertGreaterEqual(len(arch["lower_line"]["anchors"]), 2)
         self.assertGreater(arch["upper_breakout"], arch["upper"])
@@ -652,7 +652,7 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(arch["kind"], "上升通道")
         self.assertEqual(arch["sub_structure"]["kind"], "下降通道")
         self.assertGreaterEqual(len(arch["sub_structure"]["upper_line"]["points"]), 2)
-        self.assertEqual(len(arch["sub_structure"]["lower_line"]["points"]), 2)
+        self.assertGreaterEqual(len(arch["sub_structure"]["lower_line"]["points"]), 2)
         self.assertTrue(any(item["step"] == "子趋势" for item in arch["logic"]))
 
     def test_crypto_market_architecture_falling_upper_uses_lower_high_chain(self) -> None:
@@ -674,6 +674,28 @@ class DirectionGateTests(unittest.TestCase):
 
         if arch["kind"] in {"下降通道", "收敛三角/楔形"}:
             self.assertEqual([p["idx"] for p in arch["upper_line"]["anchors"]], [60, 68, 82])
+
+    def test_crypto_market_architecture_envelope_keeps_outer_rails(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_envelope",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        highs = [
+            {"idx": 0, "price": 100.0},
+            {"idx": 5, "price": 90.0},
+            {"idx": 10, "price": 80.0},
+        ]
+        lows = [
+            {"idx": 0, "price": 50.0},
+            {"idx": 5, "price": 58.0},
+            {"idx": 10, "price": 66.0},
+        ]
+
+        upper = mod._architecture_envelope_line(highs, 10, "upper", 0)
+        lower = mod._architecture_envelope_line(lows, 10, "lower", 0)
+
+        self.assertEqual([p["idx"] for p in upper["anchors"]], [0, 10])
+        self.assertEqual([p["idx"] for p in lower["anchors"]], [0, 10])
 
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(
@@ -712,8 +734,8 @@ class DirectionGateTests(unittest.TestCase):
 
         self.assertEqual(payload["symbol"], "BTCUSDT")
         self.assertEqual(payload["architecture"]["kind"], "上升通道")
-        self.assertEqual(len(payload["lines"]["upper"]), 2)
-        self.assertEqual(len(payload["lines"]["lower"]), 2)
+        self.assertGreaterEqual(len(payload["lines"]["upper"]), 2)
+        self.assertGreaterEqual(len(payload["lines"]["lower"]), 2)
         self.assertIn("subUpper", payload["lines"])
         self.assertIn("subLower", payload["lines"])
         self.assertIn("LightweightCharts", html)

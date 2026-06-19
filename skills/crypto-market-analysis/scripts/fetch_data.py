@@ -810,6 +810,42 @@ def _architecture_polyline(points, end_idx, fallback):
     }
 
 
+def _cross(a, b, c):
+    return (b['idx'] - a['idx']) * (c['price'] - a['price']) - (b['price'] - a['price']) * (c['idx'] - a['idx'])
+
+
+def _envelope_chain(points, side):
+    ordered = sorted(points, key=lambda p: (p['idx'], p['price']))
+    deduped = []
+    for point in ordered:
+        if deduped and point['idx'] == deduped[-1]['idx']:
+            if (side == 'upper' and point['price'] > deduped[-1]['price']) or (side == 'lower' and point['price'] < deduped[-1]['price']):
+                deduped[-1] = point
+            continue
+        deduped.append(point)
+    if len(deduped) <= 2:
+        return deduped
+
+    hull = []
+    for point in deduped:
+        while len(hull) >= 2:
+            turn = _cross(hull[-2], hull[-1], point)
+            if (side == 'upper' and turn >= 0) or (side == 'lower' and turn <= 0):
+                hull.pop()
+            else:
+                break
+        hull.append(point)
+    return hull if len(hull) >= 2 else deduped[-2:]
+
+
+def _architecture_envelope_line(points, end_idx, side, fallback):
+    fallback = float(fallback or 0.0)
+    chain = _envelope_chain(points, side)
+    if len(chain) < 2:
+        return _architecture_line(points, 0, end_idx, fallback)
+    return _architecture_polyline(chain, end_idx, fallback)
+
+
 def _architecture_kind(high_slope, low_slope, width_pct, threshold=1.0):
     high_up = high_slope > threshold
     high_down = high_slope < -threshold
@@ -915,22 +951,6 @@ def _main_rising_high_chain(highs, min_record_pct=0.004):
     return selected if len(selected) >= 2 else highs
 
 
-def _main_falling_high_chain(highs, min_drop_pct=0.003):
-    if len(highs) < 3:
-        return highs
-    peak_pos = max(range(len(highs)), key=lambda i: highs[i]['price'])
-    later = highs[peak_pos:]
-    if len(later) < 2:
-        return highs
-    selected = [later[0]]
-    for point in later[1:]:
-        if point['price'] <= selected[-1]['price'] * (1 - min_drop_pct):
-            selected.append(point)
-        elif point['price'] > selected[-1]['price']:
-            selected[-1] = point
-    return selected if len(selected) >= 2 else highs
-
-
 def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1.0):
     if len(highs) < 2 or len(lows) < 3:
         return None
@@ -982,16 +1002,10 @@ def _sub_structure_from_candidate(cand, end_idx, current):
         return None
     upper = cand['upper']
     lower = cand['lower']
-    highs = cand['highs']
-    if cand['kind'] in {'下降通道', '收敛三角/楔形'}:
-        highs = _main_falling_high_chain(highs)
-        projected_upper = _project_line(highs[-2:], end_idx)
-        if projected_upper is not None:
-            upper = float(projected_upper)
-        upper_line = _architecture_polyline(highs, end_idx, upper)
-    else:
-        upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
-    lower_line = _architecture_line(cand['lows'], cand['lows'][0]['idx'], end_idx, lower)
+    upper_line = _architecture_envelope_line(cand['highs'], end_idx, 'upper', upper)
+    lower_line = _architecture_envelope_line(cand['lows'], end_idx, 'lower', lower)
+    upper = upper_line['points'][-1]['price']
+    lower = lower_line['points'][-1]['price']
     if lower > upper:
         lower, upper = upper, lower
         lower_line, upper_line = upper_line, lower_line
@@ -1091,17 +1105,10 @@ def _crypto_market_architecture(rows):
         kind = selected['kind']
         upper = selected['upper']
         lower = selected['lower']
-        if selected.get('mode') == '底部趋势线':
-            upper_line = _architecture_polyline(highs, end_idx, upper)
-        elif kind in {'下降通道', '收敛三角/楔形'}:
-            highs = _main_falling_high_chain(highs)
-            projected_upper = _project_line(highs[-2:], end_idx)
-            if projected_upper is not None:
-                upper = float(projected_upper)
-            upper_line = _architecture_polyline(highs, end_idx, upper)
-        else:
-            upper_line = _architecture_line(highs, highs[0]['idx'], end_idx, upper)
-        lower_line = _architecture_line(lows, lows[0]['idx'], end_idx, lower)
+        upper_line = _architecture_envelope_line(highs, end_idx, 'upper', upper)
+        lower_line = _architecture_envelope_line(lows, end_idx, 'lower', lower)
+        upper = upper_line['points'][-1]['price']
+        lower = lower_line['points'][-1]['price']
         start_idx = selected['start_idx']
         mode = selected.get('mode', '摆点窗口')
         if recent_probe and recent_probe['kind'] != kind:

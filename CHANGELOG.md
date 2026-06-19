@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## v1.2.11 (2026-06-19) — Crypto 外沿包络线
+
+### 修复
+
+- 市场架构图的上轨/下轨统一改为外沿包络线：上轨使用摆高上包络，下轨使用摆低下包络。
+- 移除单币式高点链补丁，父级结构和子趋势都走同一套几何外沿规则。
+- 解决 BTC/ZEC 这类结构中，趋势线被中间回调摆点或早期无关摆点拉歪的问题。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py BTC`
+- `python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC`
+
 ## v1.2.10 (2026-06-19) — Crypto 下降上轨 lower high 链
 
 ### 修复
