@@ -32,6 +32,34 @@ def ohlc_rows(count: int, *, start: float = 100.0, step: float = 1.0) -> list[di
     return rows
 
 
+def channel_rows(
+    count: int,
+    *,
+    start_low: float,
+    low_step: float,
+    width: float,
+    close_position: float = 0.65,
+) -> list[dict[str, float | int | str]]:
+    rows = []
+    for i in range(count):
+        base = start_low + i * low_step
+        high_boost = 5.0 if i % 6 == 2 else 0.0
+        low_boost = -5.0 if i % 6 == 5 else 0.0
+        low = base + low_boost
+        high = base + width + high_boost
+        close = low + (high - low) * close_position
+        rows.append({
+            "ts": 1710000000 + i * 3600,
+            "time_utc": f"2026-06-{(i % 28) + 1:02d} 00:00",
+            "open": close - 0.1,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": 1000 + i,
+        })
+    return rows
+
+
 class DirectionGateTests(unittest.TestCase):
     def test_futures_requires_multidimension_confirmation(self) -> None:
         mod = load_module(
@@ -485,6 +513,44 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data)
         self.assertNotIn("技术结构", votes["missing"])
         self.assertTrue(any("技术结构=震荡/无方向优势" in item for item in votes["neutral"]))
+
+    def test_crypto_market_architecture_detects_rising_channel(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = channel_rows(48, start_low=100, low_step=0.8, width=8, close_position=0.82)
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["kind"], "上升通道")
+        self.assertEqual(arch["stance"], "做多")
+        self.assertIn("市场架构=上升通道", arch["reason"])
+
+    def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_dimension",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = channel_rows(48, start_low=100, low_step=1.0, width=8, close_position=0.82)
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 0.0,
+                "oi_60m_change_pct": 0.0,
+                "latest_long_short_ratio": 1.0,
+                "latest_funding_rate": 0.0,
+            },
+            "macro": {},
+            "sentiment": {},
+        }
+
+        votes = mod.directional_evidence(data)
+
+        self.assertEqual(len(votes["做多"]), 1)
+        self.assertIn("技术结构", votes["做多"][0])
+        self.assertIn("市场架构=上升通道", votes["做多"][0])
 
 
 if __name__ == "__main__":

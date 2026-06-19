@@ -231,6 +231,13 @@ def block_klines(coin_id):
         print('大波动K线:')
         for body, r in events:
             print(f'  {fmt_ts(r["t"])} body:{(r["c"]-r["o"])/r["o"]*100:+.2f}% range:{(r["h"]-r["l"])/r["o"]*100:.2f}%')
+        arch = _crypto_market_architecture(rows)
+        print(
+            '4H市场架构: '
+            f'{arch["kind"]} | {arch["position"]} | '
+            f'下轨/支撑 ${_fmt_level(arch["lower"])} | 上轨/阻力 ${_fmt_level(arch["upper"])} | '
+            f'倾向 {arch["stance"]}'
+        )
     # 90D 日线轮廓
     d = safe_fetch(f'https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=90', '日线')
     if d:
@@ -728,6 +735,139 @@ def _crypto_pattern(rows):
     return '阴跌磨人'
 
 
+def _crypto_swings(rows, radius=2):
+    highs, lows = [], []
+    for i in range(radius, len(rows) - radius):
+        high = _high(rows[i])
+        low = _low(rows[i])
+        if all(high > _high(rows[i + d]) for d in range(-radius, radius + 1) if d != 0):
+            highs.append({'idx': i, 'price': high, 'row': rows[i]})
+        if all(low < _low(rows[i + d]) for d in range(-radius, radius + 1) if d != 0):
+            lows.append({'idx': i, 'price': low, 'row': rows[i]})
+    return {'highs': highs, 'lows': lows}
+
+
+def _swing_slope_pct(points):
+    if len(points) < 2:
+        return 0.0
+    first, last = points[0], points[-1]
+    base = first['price'] or 1.0
+    return (last['price'] / base - 1) * 100
+
+
+def _project_line(points, target_idx):
+    if len(points) < 2:
+        return points[-1]['price'] if points else None
+    first, last = points[0], points[-1]
+    idx_delta = last['idx'] - first['idx']
+    if idx_delta == 0:
+        return last['price']
+    slope = (last['price'] - first['price']) / idx_delta
+    return last['price'] + slope * (target_idx - last['idx'])
+
+
+def _crypto_market_architecture(rows):
+    rows = _normalize_kline_rows(rows)
+    if len(rows) < 20:
+        return {
+            'kind': '数据不足',
+            'stance': '中性',
+            'position': '结构不足',
+            'lower': 0.0,
+            'upper': 0.0,
+            'reason': '市场架构=数据不足',
+        }
+
+    current = _close(rows[-1])
+    recent = rows[-60:] if len(rows) >= 60 else rows
+    recent_high = max(_high(r) for r in recent)
+    recent_low = min(_low(r) for r in recent)
+    swings = _crypto_swings(rows)
+    highs = swings['highs'][-4:]
+    lows = swings['lows'][-4:]
+    high_slope = _swing_slope_pct(highs)
+    low_slope = _swing_slope_pct(lows)
+
+    threshold = 1.0
+    high_up = high_slope > threshold
+    high_down = high_slope < -threshold
+    low_up = low_slope > threshold
+    low_down = low_slope < -threshold
+
+    if len(highs) >= 2 and len(lows) >= 2:
+        if high_up and low_up:
+            kind = '上升通道'
+        elif high_down and low_down:
+            kind = '下降通道'
+        elif high_down and low_up:
+            kind = '收敛三角/楔形'
+        elif high_up and low_down:
+            kind = '扩散震荡'
+        else:
+            width_pct = (recent_high - recent_low) / max(recent_low, 0.01) * 100
+            kind = '箱体结构' if width_pct < 18 else '宽幅震荡'
+        upper = _project_line(highs, len(rows) - 1)
+        lower = _project_line(lows, len(rows) - 1)
+        if upper is None:
+            upper = recent_high
+        if lower is None:
+            lower = recent_low
+    else:
+        width_pct = (recent_high - recent_low) / max(recent_low, 0.01) * 100
+        kind = '箱体结构' if width_pct < 18 else '结构待确认'
+        upper = recent_high
+        lower = recent_low
+
+    if lower > upper:
+        lower, upper = upper, lower
+
+    span = max(upper - lower, current * 0.005, 0.01)
+    break_buffer = max(current * 0.006, span * 0.08)
+    mid = lower + span * 0.5
+    if current > upper + break_buffer:
+        position = '上破上轨'
+        stance = '做多'
+    elif current < lower - break_buffer:
+        position = '下破下轨'
+        stance = '做空'
+    else:
+        ratio = (current - lower) / span
+        if ratio >= 0.75:
+            zone = '靠近上轨'
+        elif ratio <= 0.25:
+            zone = '靠近下轨'
+        else:
+            zone = '中轨附近'
+        position = f'通道内{zone}'
+        if kind == '上升通道' and current >= mid:
+            stance = '做多'
+        elif kind == '下降通道' and current <= mid:
+            stance = '做空'
+        else:
+            stance = '中性'
+
+    reason = f'市场架构={kind}，{position}，下轨/支撑 {_fmt_level(lower)}，上轨/阻力 {_fmt_level(upper)}'
+    return {
+        'kind': kind,
+        'stance': stance,
+        'position': position,
+        'lower': float(lower),
+        'upper': float(upper),
+        'high_slope_pct': high_slope,
+        'low_slope_pct': low_slope,
+        'reason': reason,
+    }
+
+
+def _fmt_level(value):
+    value = float(value)
+    if abs(value) >= 1000:
+        return f'{value:,.0f}'
+    if abs(value) >= 10:
+        return f'{value:,.2f}'
+    return f'{value:,.4f}'
+
+
 def _crypto_price_bias(daily, h4):
     daily = _normalize_kline_rows(daily)
     h4 = _normalize_kline_rows(h4)
@@ -747,7 +887,7 @@ def _crypto_price_bias(daily, h4):
 def _crypto_dimension(reason):
     if reason.startswith(('新闻/事件', 'ETF/监管/机构')):
         return '新闻/事件基本面'
-    if reason.startswith('技术结构') or '4H主导手法' in reason:
+    if reason.startswith('技术结构') or reason.startswith('市场架构') or '4H主导手法' in reason:
         return '技术结构'
     if reason.startswith(('合约', 'OI', '资金费率', '多空比')):
         return '合约结构'
@@ -920,6 +1060,12 @@ def directional_evidence(data):
         votes['做空'].append(f'4H主导手法={pattern}')
     elif pattern in {'箱体洗盘', '跌破回收'}:
         votes['neutral'].append(f'4H主导手法={pattern}')
+
+    arch = _crypto_market_architecture(h4_rows)
+    if arch['stance'] in {'做多', '做空'}:
+        votes[arch['stance']].append(arch['reason'])
+    elif arch['kind'] != '数据不足':
+        votes['neutral'].append(arch['reason'])
 
     _contract_votes(data, votes)
     _news_votes(data, votes)
