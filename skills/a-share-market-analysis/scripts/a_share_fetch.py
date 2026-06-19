@@ -77,6 +77,11 @@ def fetch_text(url: str, encoding: str = "utf-8", headers: dict | None = None) -
                 time.sleep(2 ** attempt + 1)
                 continue
             raise
+        except (urllib.request.URLError, OSError):
+            if attempt == 2:
+                from scripts.curl_fallback import curl_fetch_text
+                return curl_fetch_text(url, timeout=20)
+            time.sleep(1)
 
 
 def fetch_json(url: str, encoding: str = "utf-8", headers: dict | None = None) -> dict:

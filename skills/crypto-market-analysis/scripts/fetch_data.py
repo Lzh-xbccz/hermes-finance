@@ -105,9 +105,25 @@ def _bust_cache(url: str) -> str:
     return f'{url}{sep}_nocache={ts}'
 
 
+def _curl_fetch(url, timeout=10):
+    """urllib SSL 不兼容时降级到 curl subprocess。"""
+    import subprocess as _sp
+    try:
+        r = _sp.run(['curl', '-s', '--connect-timeout', str(timeout), url],
+                    capture_output=True, text=True, timeout=timeout + 5)
+        if r.returncode == 0 and r.stdout.strip():
+            return json.loads(r.stdout)
+    except Exception:
+        pass
+    raise OSError('curl fallback failed')
+
+
 def fetch(url, timeout=10):
     req = urllib.request.Request(_bust_cache(url), headers=UA)
-    return json.load(urllib.request.urlopen(req, timeout=timeout))
+    try:
+        return json.load(urllib.request.urlopen(req, timeout=timeout))
+    except (urllib.request.URLError, OSError):
+        return _curl_fetch(url, timeout=timeout)
 
 
 def market_symbol(coin_id: str, quote: str = 'USDT') -> str:
@@ -133,7 +149,15 @@ def safe_fetch(url, label="", timeout=10):
 
 def fetch_text(url, timeout=10):
     req = urllib.request.Request(_bust_cache(url), headers=UA)
-    return urllib.request.urlopen(req, timeout=timeout).read().decode('utf-8', 'ignore')
+    try:
+        return urllib.request.urlopen(req, timeout=timeout).read().decode('utf-8', 'ignore')
+    except (urllib.request.URLError, OSError):
+        import subprocess as _sp
+        r = _sp.run(['curl', '-s', '--connect-timeout', str(timeout), url],
+                    capture_output=True, text=True, timeout=timeout + 5)
+        if r.returncode == 0:
+            return r.stdout
+        raise OSError('curl fallback failed')
 
 
 def safe_fetch_text(url, label="", timeout=10):

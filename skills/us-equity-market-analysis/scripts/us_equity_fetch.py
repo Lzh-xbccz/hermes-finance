@@ -50,6 +50,11 @@ def fetch_json(url: str, retries: int = 3) -> Dict[str, Any]:
                 import time; time.sleep(2 ** attempt + 1)
                 continue
             raise
+        except (urllib.request.URLError, OSError):
+            if attempt == retries - 1:
+                from scripts.curl_fallback import curl_fetch_json
+                return curl_fetch_json(url, timeout=20)
+            import time; time.sleep(1)
 
 
 def fetch_text(url: str, retries: int = 3) -> str:
@@ -64,6 +69,11 @@ def fetch_text(url: str, retries: int = 3) -> str:
                 import time; time.sleep(2 ** attempt + 1)
                 continue
             raise
+        except (urllib.request.URLError, OSError):
+            if attempt == retries - 1:
+                from scripts.curl_fallback import curl_fetch_text
+                return curl_fetch_text(url, timeout=20)
+            import time; time.sleep(1)
 
 
 def to_float(value: Any) -> float | None:
