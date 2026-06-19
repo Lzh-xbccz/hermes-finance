@@ -902,13 +902,18 @@ def directional_evidence(data):
 
     daily = data.get('daily') or data.get('daily_90d') or []
     h4 = data.get('h4') or data.get('agg_4h_30d') or data.get('agg_4h_10d') or []
-    tech = _crypto_price_bias(daily, h4)
-    if tech in {'做多', '做空'}:
-        votes[tech].append(f'技术结构={tech}')
-    else:
+    daily_rows = _normalize_kline_rows(daily)
+    h4_rows = _normalize_kline_rows(h4)
+    if len(daily_rows) < 20 or len(h4_rows) < 8:
         votes['missing'].append('技术结构')
+    else:
+        tech = _crypto_price_bias(daily_rows, h4_rows)
+        if tech in {'做多', '做空'}:
+            votes[tech].append(f'技术结构={tech}')
+        else:
+            votes['neutral'].append('技术结构=震荡/无方向优势')
 
-    pattern = _crypto_pattern(h4)
+    pattern = _crypto_pattern(h4_rows)
     if pattern == '趋势推进':
         votes['做多'].append('4H主导手法=趋势推进')
     elif pattern in {'冲高派发', '阴跌磨人'}:

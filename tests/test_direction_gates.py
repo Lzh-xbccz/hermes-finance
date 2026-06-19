@@ -452,6 +452,40 @@ class DirectionGateTests(unittest.TestCase):
         self.assertIn("合约结构", votes["missing"])
         self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
+    def test_crypto_technical_neutral_is_not_missing_when_4h_pattern_votes(self) -> None:
+        mod = load_module(
+            "crypto_fetch_technical_neutral_gate",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = []
+        for i in range(40):
+            close = 100 + (i % 5 - 2)
+            rows.append({
+                "ts": 1710000000 + i * 3600,
+                "time_utc": f"2026-06-{(i % 28) + 1:02d} 00:00",
+                "open": close,
+                "high": 110 if i % 7 == 0 else close + 1,
+                "low": 90 if i % 9 == 0 or i >= 37 else close - 1,
+                "close": close,
+                "volume": 1000,
+            })
+        data = {
+            "daily": rows,
+            "h4": rows,
+            "contracts": {
+                "price_change_pct_24h": 0.0,
+                "oi_60m_change_pct": 0.0,
+                "latest_long_short_ratio": 1.0,
+                "latest_funding_rate": 0.0,
+            },
+            "macro": {},
+            "sentiment": {},
+        }
+
+        votes = mod.directional_evidence(data)
+        self.assertNotIn("技术结构", votes["missing"])
+        self.assertTrue(any("技术结构=震荡/无方向优势" in item for item in votes["neutral"]))
+
 
 if __name__ == "__main__":
     unittest.main()
