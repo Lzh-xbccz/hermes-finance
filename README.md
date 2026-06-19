@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.2.4-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.2.5-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 让 AI 帮你分析金融市场。喊一声"分析 BTC"，自动拉行情、合约、链上、宏观数据，八维过一遍，过不了方向质量门槛就说观望，过得去才给多空。
@@ -47,6 +47,7 @@ python3 -m hermes_finance analyze a-share --stock 600519
 
 ```bash
 python3 skills/crypto-market-analysis/scripts/fetch_data.py BTC all
+python3 skills/crypto-market-analysis/scripts/market_structure_chart.py BTC
 python3 skills/futures-market-analysis/scripts/futures_fetch.py GC
 ```
 
@@ -194,7 +195,9 @@ hermes-finance/
 
 完整日志见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
 
-技术结构逻辑图见 [docs/TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md)。
+技术结构逻辑图和 HTML 形态图说明见 [docs/TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md)。
+
+**v1.2.5** — 新增 Crypto 4H 市场架构 HTML 形态图（上轨/下轨/中轨/摆点/突破触发）
 
 **v1.2.4** — 新增技术结构 Mermaid 逻辑图文档
 

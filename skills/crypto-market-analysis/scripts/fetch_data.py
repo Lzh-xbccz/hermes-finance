@@ -677,7 +677,10 @@ def _to_float(value, default=None):
 
 def _row_value(row, key, alt=None):
     if isinstance(row, dict):
-        return _to_float(row.get(key, row.get(alt)))
+        value = row.get(key)
+        if value is None and alt is not None:
+            value = row.get(alt)
+        return _to_float(value)
     return None
 
 
@@ -695,6 +698,10 @@ def _low(row):
 
 def _open(row):
     return _row_value(row, 'open', 'o')
+
+
+def _volume(row):
+    return _row_value(row, 'volume', 'v') or 0.0
 
 
 def _normalize_kline_rows(rows):
@@ -766,6 +773,25 @@ def _project_line(points, target_idx):
     return last['price'] + slope * (target_idx - last['idx'])
 
 
+def _architecture_line(points, start_idx, end_idx, fallback):
+    fallback = float(fallback or 0.0)
+    if len(points) >= 2:
+        start_price = _project_line(points, start_idx)
+        end_price = _project_line(points, end_idx)
+        anchors = [{'idx': int(p['idx']), 'price': float(p['price'])} for p in points]
+    else:
+        start_price = fallback
+        end_price = fallback
+        anchors = []
+    return {
+        'points': [
+            {'idx': int(start_idx), 'price': float(start_price if start_price is not None else fallback)},
+            {'idx': int(end_idx), 'price': float(end_price if end_price is not None else fallback)},
+        ],
+        'anchors': anchors,
+    }
+
+
 def _crypto_market_architecture(rows):
     rows = _normalize_kline_rows(rows)
     if len(rows) < 20:
@@ -775,11 +801,20 @@ def _crypto_market_architecture(rows):
             'position': '结构不足',
             'lower': 0.0,
             'upper': 0.0,
+            'mid': 0.0,
+            'break_buffer': 0.0,
+            'upper_breakout': 0.0,
+            'lower_breakdown': 0.0,
+            'upper_line': {'points': [], 'anchors': []},
+            'lower_line': {'points': [], 'anchors': []},
+            'logic': [{'step': '数据检查', 'detail': '4H K线少于20根，不能确认市场架构'}],
             'reason': '市场架构=数据不足',
         }
 
     current = _close(rows[-1])
     recent = rows[-60:] if len(rows) >= 60 else rows
+    start_idx = len(rows) - len(recent)
+    end_idx = len(rows) - 1
     recent_high = max(_high(r) for r in recent)
     recent_low = min(_low(r) for r in recent)
     swings = _crypto_swings(rows)
@@ -812,18 +847,25 @@ def _crypto_market_architecture(rows):
             upper = recent_high
         if lower is None:
             lower = recent_low
+        upper_line = _architecture_line(highs, start_idx, end_idx, upper)
+        lower_line = _architecture_line(lows, start_idx, end_idx, lower)
     else:
         width_pct = (recent_high - recent_low) / max(recent_low, 0.01) * 100
         kind = '箱体结构' if width_pct < 18 else '结构待确认'
         upper = recent_high
         lower = recent_low
+        upper_line = _architecture_line([], start_idx, end_idx, upper)
+        lower_line = _architecture_line([], start_idx, end_idx, lower)
 
     if lower > upper:
         lower, upper = upper, lower
+        lower_line, upper_line = upper_line, lower_line
 
     span = max(upper - lower, current * 0.005, 0.01)
     break_buffer = max(current * 0.006, span * 0.08)
     mid = lower + span * 0.5
+    upper_breakout = upper + break_buffer
+    lower_breakdown = lower - break_buffer
     if current > upper + break_buffer:
         position = '上破上轨'
         stance = '做多'
@@ -847,14 +889,28 @@ def _crypto_market_architecture(rows):
             stance = '中性'
 
     reason = f'市场架构={kind}，{position}，下轨/支撑 {_fmt_level(lower)}，上轨/阻力 {_fmt_level(upper)}'
+    logic = [
+        {'step': '取样', 'detail': f'最近{len(recent)}根4H K线，识别摆高{len(highs)}个、摆低{len(lows)}个'},
+        {'step': '斜率', 'detail': f'摆高斜率{high_slope:+.2f}%，摆低斜率{low_slope:+.2f}%'},
+        {'step': '分类', 'detail': kind},
+        {'step': '轨道', 'detail': f'下轨/支撑 {_fmt_level(lower)}，中轨 {_fmt_level(mid)}，上轨/阻力 {_fmt_level(upper)}'},
+        {'step': '触发', 'detail': f'上破 {_fmt_level(upper_breakout)} / 下破 {_fmt_level(lower_breakdown)}'},
+    ]
     return {
         'kind': kind,
         'stance': stance,
         'position': position,
         'lower': float(lower),
         'upper': float(upper),
+        'mid': float(mid),
+        'break_buffer': float(break_buffer),
+        'upper_breakout': float(upper_breakout),
+        'lower_breakdown': float(lower_breakdown),
+        'upper_line': upper_line,
+        'lower_line': lower_line,
         'high_slope_pct': high_slope,
         'low_slope_pct': low_slope,
+        'logic': logic,
         'reason': reason,
     }
 

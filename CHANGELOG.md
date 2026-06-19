@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## v1.2.5 (2026-06-19) — Crypto 市场架构 HTML 形态图
+
+### 新增
+
+- 新增 `skills/crypto-market-analysis/scripts/market_structure_chart.py`，可生成 standalone lightweight-charts HTML 形态图。
+- 图中直接绘制 4H K 线、成交量、上轨/阻力、下轨/支撑、中轨、摆高/摆低锚点，以及上破/下破触发线。
+- 市场架构函数新增可视化 payload：结构线端点、摆点锚点、中轨、突破缓冲和逐步逻辑说明。
+
+### 验证
+
+- `python3 -m py_compile skills/crypto-market-analysis/scripts/fetch_data.py skills/crypto-market-analysis/scripts/market_structure_chart.py tests/test_direction_gates.py`
+- `python3 -m unittest tests.test_direction_gates -v`
+- `python3 -m unittest discover -s tests`
+
 ## v1.2.4 (2026-06-19) — 技术结构逻辑图
 
 ### 新增

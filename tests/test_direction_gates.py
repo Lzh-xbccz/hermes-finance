@@ -527,6 +527,23 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(arch["stance"], "做多")
         self.assertIn("市场架构=上升通道", arch["reason"])
 
+    def test_crypto_market_architecture_returns_drawable_lines(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_lines",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = channel_rows(48, start_low=100, low_step=0.8, width=8, close_position=0.82)
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(len(arch["upper_line"]["points"]), 2)
+        self.assertEqual(len(arch["lower_line"]["points"]), 2)
+        self.assertGreaterEqual(len(arch["upper_line"]["anchors"]), 2)
+        self.assertGreaterEqual(len(arch["lower_line"]["anchors"]), 2)
+        self.assertGreater(arch["upper_breakout"], arch["upper"])
+        self.assertLess(arch["lower_breakdown"], arch["lower"])
+        self.assertTrue(any(item["step"] == "轨道" for item in arch["logic"]))
+
     def test_crypto_market_architecture_is_one_technical_dimension(self) -> None:
         mod = load_module(
             "crypto_fetch_market_architecture_dimension",
@@ -551,6 +568,24 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(len(votes["做多"]), 1)
         self.assertIn("技术结构", votes["做多"][0])
         self.assertIn("市场架构=上升通道", votes["做多"][0])
+
+    def test_market_structure_chart_payload_and_html(self) -> None:
+        mod = load_module(
+            "crypto_market_structure_chart",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "market_structure_chart.py",
+        )
+        rows = channel_rows(48, start_low=100, low_step=0.8, width=8, close_position=0.82)
+
+        payload = mod.build_market_structure_payload("btc", rows)
+        html = mod.render_market_structure_html(payload)
+
+        self.assertEqual(payload["symbol"], "BTCUSDT")
+        self.assertEqual(payload["architecture"]["kind"], "上升通道")
+        self.assertEqual(len(payload["lines"]["upper"]), 2)
+        self.assertEqual(len(payload["lines"]["lower"]), 2)
+        self.assertIn("LightweightCharts", html)
+        self.assertIn("上升通道", html)
+        self.assertIn("上轨 / 阻力", html)
 
 
 if __name__ == "__main__":

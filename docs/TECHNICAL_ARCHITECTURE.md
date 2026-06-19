@@ -99,3 +99,44 @@ For example:
 - `Descending channel + price near upper rail` is not automatically bullish; it is usually a resistance test unless price breaks and holds above the rail.
 - `Breakout above upper rail` is bullish only as a technical proxy; it still needs the direction quality gate to pass.
 - `Expanding range` usually means unstable structure and should tend neutral unless a clean breakout or breakdown is confirmed.
+
+## HTML Shape Chart
+
+The chart renderer follows the same practical pattern as CZSC lightweight HTML: structured payload first, HTML/JavaScript renderer second. It does not modify upstream `czsc`; it renders Hermes' own 4H market architecture layer.
+
+```bash
+python3 skills/crypto-market-analysis/scripts/market_structure_chart.py BTC
+python3 skills/crypto-market-analysis/scripts/market_structure_chart.py ZEC --output /tmp/zec_structure.html
+```
+
+```mermaid
+flowchart TD
+    A[Binance 4H K-lines] --> B[build_market_structure_payload]
+    B --> C[_crypto_market_architecture]
+    C --> D[Structure type and stance]
+    C --> E[Upper rail points]
+    C --> F[Lower rail points]
+    C --> G[Mid rail and trigger levels]
+    C --> H[Swing high / low anchors]
+
+    B --> I[Candlestick series]
+    B --> J[Volume series]
+    D --> K[Summary panel]
+    E --> L[HTML renderer]
+    F --> L
+    G --> L
+    H --> L
+    I --> L
+    J --> L
+    K --> L
+
+    L --> M[Standalone lightweight-charts HTML]
+```
+
+The visual chart draws:
+
+- Candlesticks and volume.
+- Upper rail / resistance, lower rail / support, and mid rail.
+- Swing high and swing low anchor markers used by the structure detector.
+- Breakout and breakdown trigger lines based on the same buffer used by the text analysis.
+- A side panel with structure type, current location, stance, rail prices, and step-by-step logic.
