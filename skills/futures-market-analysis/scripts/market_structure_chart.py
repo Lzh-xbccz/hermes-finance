@@ -110,11 +110,12 @@ def _structure_markers(upper_line, lower_line, rows, break_idx, break_position):
             "text": "通道低点",
         })
     if break_idx is not None:
+        is_up_break = "上破" in break_position
         markers.append({
             "time": _time_at(rows, break_idx),
-            "position": "belowBar" if "上破" in break_position else "aboveBar",
-            "color": "#059669" if "上破" in break_position else "#DC2626",
-            "shape": "arrowUp" if "上破" in break_position else "arrowDown",
+            "position": "belowBar" if is_up_break else "aboveBar",
+            "color": "#059669" if is_up_break else "#DC2626",
+            "shape": "arrowUp" if is_up_break else "arrowDown",
             "text": break_position,
         })
     return sorted(markers, key=lambda x: x["time"])
@@ -172,11 +173,18 @@ def build_futures_structure_payload(symbol, rows, binance_symbol=None, interval=
     post_high = max(_high(r) for r in recent_after)
     last = float(_close(rows[-1]))
     status = break_position or arch["position"]
-    summary_note = (
-        "旧通道已在首次突破处截断；后续按突破后回踩/延续观察，不再把过期通道延伸到最新K线。"
-        if break_idx is not None
-        else "未出现确认突破，结构通道延伸到最新K线。"
-    )
+    if break_idx is not None and "上破" in break_position:
+        summary_note = "旧通道已在首次上破处截断；后续按上破后回踩/延续观察，不再把过期通道延伸到最新K线。"
+        post_high_title = "上破后高点"
+        retest_low_title = "上破后回踩低点"
+    elif break_idx is not None and "下破" in break_position:
+        summary_note = "旧通道已在首次下破处截断；后续按下破后反抽/延续观察，不再把过期通道延伸到最新K线。"
+        post_high_title = "下破后反抽高点"
+        retest_low_title = "下破后低点"
+    else:
+        summary_note = "未出现确认上破/下破，结构通道延伸到最新K线。"
+        post_high_title = "近期高点"
+        retest_low_title = "近期低点"
 
     return {
         "symbol": f"{root} / {label}",
@@ -192,8 +200,8 @@ def build_futures_structure_payload(symbol, rows, binance_symbol=None, interval=
             "lower": _line_to_series(lower_line, rows),
         },
         "price_lines": [
-            {"price": float(post_high), "title": "突破后高点", "color": "#B45309"},
-            {"price": float(retest_low), "title": "突破后回踩低点", "color": "#047857"},
+            {"price": float(post_high), "title": post_high_title, "color": "#B45309"},
+            {"price": float(retest_low), "title": retest_low_title, "color": "#047857"},
         ] if break_idx is not None else [],
         "architecture": {
             "kind": arch["kind"],

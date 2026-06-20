@@ -156,6 +156,40 @@ class BinanceTradFiTests(unittest.TestCase):
         self.assertNotIn("addHistogramSeries", html)
         self.assertIn("无成交量背景", html)
 
+    def test_futures_market_structure_chart_labels_breakdown_as_breakdown_not_breakout(self) -> None:
+        rows = []
+        highs = {25: 90.0, 38: 96.0, 52: 103.0, 64: 110.0}
+        lows = {23: 80.0, 36: 86.0, 50: 93.0, 62: 100.0}
+        for i in range(76):
+            base = 82 + i * 0.35
+            low = lows.get(i, base - 1.0)
+            high = highs.get(i, base + 1.0)
+            if i >= 67:
+                high = 101 - (i - 67) * 0.45
+                low = high - 2.4
+            close = low + (high - low) * 0.45
+            if i >= 70:
+                close = low + 0.3
+            rows.append({
+                "ts": 1710000000 + i * 14400,
+                "time_utc": f"2026-06-{(i // 6) + 1:02d} {(i % 6) * 4:02d}:00",
+                "open": close + 0.2,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": 1000 + i,
+            })
+
+        payload = futures_chart.build_futures_structure_payload("CL", rows, "CLUSDT")
+        html = futures_chart.render_futures_structure_html(payload)
+
+        self.assertEqual(payload["architecture"]["kind"], "上升通道")
+        self.assertIn("下破", payload["architecture"]["position"])
+        self.assertIn("下破后反抽高点", html)
+        self.assertIn("下破后低点", html)
+        self.assertNotIn("突破后高点", html)
+        self.assertNotIn("突破后回踩低点", html)
+
 
 if __name__ == "__main__":
     unittest.main()
