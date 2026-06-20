@@ -1,13 +1,32 @@
-# Hermes Finance — AI 驱动金融市场分析
+# Hermes Finance
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v1.2.13-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
-让 AI 帮你分析金融市场。喊一声"分析 BTC"，自动拉行情、合约、链上、宏观数据，八维过一遍，过不了方向质量门槛就说观望，过得去才给多空。
+面向 AI Agent 的多市场金融分析框架。你可以直接对 Claude Code、Codex、Cursor、Gemini、Roo、Cline 等工具说“分析 BTC”或“EURUSD 现在怎么看”，Hermes Finance 会自动识别市场、采集数据、生成结构化分析报告。
 
-覆盖：加密货币 / 商品期货 / 外汇 / A股 / 美股。
+它不是单一指标提示器，而是一套带方向质量门槛的研究流程：行情、合约、链上、宏观、情绪、新闻、交易所价差、缠论确认分层处理。证据不足时输出观望，证据通过门槛时再给偏多/偏空判断、反向审计和交易计划。
+
+支持市场：
+
+- 加密货币：K 线、合约、链上、情绪、宏观、期权、交易所价差、新闻事件
+- 商品期货：技术结构、OI/费率、EIA 库存、CFTC 持仓、OVX/DXY 交叉验证
+- 外汇：K 线结构、利差、央行事件、CFTC、美元与风险资产环境
+- A 股：指数、个股、北向资金、涨跌家数、板块轮动、量化选股
+- 美股：个股、ETF、VIX、10Y 美债、公司事件、市场交叉验证
+
+核心能力：
+
+- MCP + Skills 双入口，AI 工具可以直接调用
+- 自动市场路由，减少手动选择数据源
+- 多源数据采集，缺失数据会在报告里显式标注
+- 七维证据投票 + 缠论确认，避免单一技术指标主导结论
+- 方向质量门槛、反向审计、情景推演和交易计划
+- Crypto 4H 市场架构 HTML 图，绘制父趋势、子趋势、突破和回踩结构
+
+> 本项目用于技术交流和研究，不构成投资建议。
 
 ---
 
