@@ -54,6 +54,12 @@ def _time_at(rows, idx):
     return _row_timestamp(rows[idx], idx)
 
 
+def _utc_text_at(rows, idx):
+    if idx is None:
+        return ""
+    return datetime.fromtimestamp(_time_at(rows, idx), timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
 def _line_to_series(line, rows):
     series = []
     for point in line.get("points", []):
@@ -120,6 +126,32 @@ def _swing_markers(arch, rows):
     return sorted(markers, key=lambda x: x["time"])
 
 
+def _subtrend_break_markers(sub, rows):
+    if not sub:
+        return []
+    break_idx = sub.get("break_idx")
+    if break_idx is None:
+        return []
+    position = sub.get("position", "")
+    if "上破" in position:
+        return [{
+            "time": _time_at(rows, break_idx),
+            "position": "belowBar",
+            "color": "#059669",
+            "shape": "arrowUp",
+            "text": "子趋势上破",
+        }]
+    if "下破" in position:
+        return [{
+            "time": _time_at(rows, break_idx),
+            "position": "aboveBar",
+            "color": "#DC2626",
+            "shape": "arrowDown",
+            "text": "子趋势下破",
+        }]
+    return []
+
+
 def fetch_binance_klines(coin_id, interval="4h", limit=180):
     symbol = market_symbol(coin_id)
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
@@ -162,6 +194,7 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
     mid = _midline_series(upper_line, lower_line, rows)
     sub_upper = _line_to_series(sub_upper_line, rows)
     sub_lower = _line_to_series(sub_lower_line, rows)
+    markers = _swing_markers(arch, rows) + _subtrend_break_markers(sub, rows)
 
     return {
         "symbol": symbol,
@@ -178,7 +211,7 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
             "subUpper": sub_upper,
             "subLower": sub_lower,
         },
-        "markers": _swing_markers(arch, rows),
+        "markers": sorted(markers, key=lambda x: x["time"]),
         "architecture": {
             "kind": arch["kind"],
             "stance": arch["stance"],
@@ -201,6 +234,9 @@ def build_market_structure_payload(coin_id, rows, interval="4h"):
             "sub_structure": {
                 "kind": sub.get("kind", ""),
                 "stance": sub.get("stance", ""),
+                "position": sub.get("position", ""),
+                "break_idx": sub.get("break_idx"),
+                "break_time_text": _utc_text_at(rows, sub.get("break_idx")) if sub.get("break_idx") is not None else "",
                 "lower": sub.get("lower", 0.0),
                 "upper": sub.get("upper", 0.0),
                 "mid": sub.get("mid", 0.0),
@@ -400,6 +436,24 @@ HTML_TEMPLATE = """<!doctype html>
       font-size: 15px;
       overflow-wrap: anywhere;
     }
+    .subtrend {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--grid);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      background: #F9FAFB;
+    }
+    .subtrend__title {
+      font-weight: 700;
+    }
+    .subtrend__break {
+      color: var(--ok);
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+    .subtrend__break--down { color: var(--danger); }
     .legend {
       display: grid;
       gap: 7px;
@@ -506,6 +560,8 @@ HTML_TEMPLATE = """<!doctype html>
             <div id="break-down" class="metric__value"></div>
           </div>
         </div>
+        <h2>Sub Trend</h2>
+        <div id="subtrend" class="subtrend"></div>
         <h2>Lines</h2>
         <div class="legend">
           <div class="legend__item"><span class="swatch swatch--upper"></span>上轨 / 阻力</div>
@@ -537,6 +593,25 @@ HTML_TEMPLATE = """<!doctype html>
     byId("upper").textContent = arch.upper_text;
     byId("break-up").textContent = arch.upper_breakout_text;
     byId("break-down").textContent = arch.lower_breakdown_text;
+    const sub = arch.sub_structure;
+    const subtrend = byId("subtrend");
+    if (sub) {
+      const title = document.createElement("div");
+      title.className = "subtrend__title";
+      title.textContent = sub.kind + " / " + sub.position + " / " + sub.stance;
+      subtrend.appendChild(title);
+      const range = document.createElement("div");
+      range.textContent = "子趋势下轨 " + sub.lower_text + " / 上轨 " + sub.upper_text;
+      subtrend.appendChild(range);
+      if (sub.break_idx !== null && sub.break_idx !== undefined) {
+        const br = document.createElement("div");
+        br.className = "subtrend__break" + (sub.position.indexOf("下破") >= 0 ? " subtrend__break--down" : "");
+        br.textContent = sub.position + " · " + sub.break_time_text;
+        subtrend.appendChild(br);
+      }
+    } else {
+      subtrend.textContent = "无独立子趋势";
+    }
     const stance = byId("stance");
     stance.textContent = arch.kind + " / " + arch.position + " / " + arch.stance;
     if (arch.stance === "做多") stance.classList.add("badge--long");

@@ -845,6 +845,7 @@ def _active_envelope_chain(chain, side, role='parent', direction_slope=0.0):
 
 def _architecture_envelope_line(points, end_idx, side, fallback, role='parent', direction_slope=0.0):
     fallback = float(fallback or 0.0)
+    points = _exclude_unconfirmed_breakout_point(points, end_idx, side, role)
     chain = _envelope_chain(points, side)
     if len(chain) < 2:
         return _architecture_line(points, 0, end_idx, fallback)
@@ -854,6 +855,28 @@ def _architecture_envelope_line(points, end_idx, side, fallback, role='parent', 
     return _architecture_line(active_chain, active_chain[0]['idx'], end_idx, fallback)
 
 
+def _exclude_unconfirmed_breakout_point(points, end_idx, side, role='parent'):
+    if role not in {'parent', 'subtrend'} or len(points) < 3:
+        return points
+    ordered = sorted(points, key=lambda p: p['idx'])
+    latest = ordered[-1]
+    previous = ordered[:-1]
+    previous_chain = _envelope_chain(previous, side)
+    if len(previous_chain) < 2:
+        return points
+    expected_latest = _project_line(previous_chain, latest['idx'])
+    expected_end = _project_line(previous_chain, end_idx)
+    if expected_latest is None or expected_end is None:
+        return points
+    base = max(abs(float(expected_latest)), abs(float(expected_end)), abs(float(latest['price'])), 0.01)
+    breakout_buffer = max(base * 0.025, base * 0.006)
+    if side == 'upper' and latest['price'] > expected_latest + breakout_buffer:
+        return previous
+    if side == 'lower' and latest['price'] < expected_latest - breakout_buffer:
+        return previous
+    return points
+
+
 def _architecture_line_slope_pct(line):
     points = line.get('points', [])
     if len(points) < 2:
@@ -861,6 +884,53 @@ def _architecture_line_slope_pct(line):
     first, last = points[0], points[-1]
     base = first.get('price') or 1.0
     return (last.get('price', base) / base - 1) * 100
+
+
+def _line_value_at_idx(line, idx):
+    points = line.get('points', [])
+    if len(points) < 2:
+        return None
+    first, last = points[0], points[-1]
+    idx_delta = last.get('idx', 0) - first.get('idx', 0)
+    if idx_delta == 0:
+        return float(last.get('price', 0.0))
+    slope = (last.get('price', 0.0) - first.get('price', 0.0)) / idx_delta
+    return float(first.get('price', 0.0) + slope * (idx - first.get('idx', 0)))
+
+
+def _truncate_line_to_idx(line, idx):
+    value = _line_value_at_idx(line, idx)
+    if value is None:
+        return line
+    points = line.get('points', [])
+    return {
+        'points': [
+            points[0],
+            {'idx': int(idx), 'price': float(value)},
+        ],
+        'anchors': list(line.get('anchors', [])),
+    }
+
+
+def _first_subtrend_break_idx(rows, upper_line, lower_line, start_idx, end_idx, break_buffer):
+    for idx in range(max(0, int(start_idx)), int(end_idx) + 1):
+        upper = _line_value_at_idx(upper_line, idx)
+        lower = _line_value_at_idx(lower_line, idx)
+        if upper is None or lower is None:
+            continue
+        row = rows[idx]
+        if _close(row) > upper + break_buffer or _high(row) > upper + break_buffer:
+            return idx, '上破子趋势上轨'
+        if _close(row) < lower - break_buffer or _low(row) < lower - break_buffer:
+            return idx, '下破子趋势下轨'
+    return None, None
+
+
+def _last_anchor_idx(*lines):
+    idxs = []
+    for line in lines:
+        idxs.extend(int(p.get('idx', 0)) for p in line.get('anchors', []))
+    return max(idxs) if idxs else None
 
 
 def _architecture_kind(high_slope, low_slope, width_pct, threshold=1.0):
@@ -1014,7 +1084,7 @@ def _foundation_trend_candidate(rows, highs, lows, end_idx, current, threshold=1
     return max(candidates, key=lambda x: (x['score'], x['start_idx'] * -1))
 
 
-def _sub_structure_from_candidate(cand, end_idx, current):
+def _sub_structure_from_candidate(cand, end_idx, current, rows=None):
     if not cand:
         return None
     upper = cand['upper']
@@ -1029,19 +1099,52 @@ def _sub_structure_from_candidate(cand, end_idx, current):
     span = max(upper - lower, current * 0.005, 0.01)
     mid = lower + span * 0.5
     break_buffer = max(current * 0.006, span * 0.08)
+    break_idx = None
+    break_position = None
+    if rows:
+        last_anchor_idx = _last_anchor_idx(upper_line, lower_line)
+        start_idx = (last_anchor_idx + 1) if last_anchor_idx is not None else min(upper_line['points'][0]['idx'], lower_line['points'][0]['idx'])
+        break_idx, break_position = _first_subtrend_break_idx(rows, upper_line, lower_line, start_idx, end_idx, break_buffer)
+        if break_idx is not None:
+            upper_line = _truncate_line_to_idx(upper_line, break_idx)
+            lower_line = _truncate_line_to_idx(lower_line, break_idx)
+            upper = upper_line['points'][-1]['price']
+            lower = lower_line['points'][-1]['price']
+            if lower > upper:
+                lower, upper = upper, lower
+                lower_line, upper_line = upper_line, lower_line
+            span = max(upper - lower, current * 0.005, 0.01)
+            mid = lower + span * 0.5
+            break_buffer = max(current * 0.006, span * 0.08)
+    upper_breakout = upper + break_buffer
+    lower_breakdown = lower - break_buffer
+    if break_position == '上破子趋势上轨' or current > upper_breakout:
+        position = '上破子趋势上轨'
+        stance = '做多' if cand['kind'] == '下降通道' else '中性'
+    elif break_position == '下破子趋势下轨' or current < lower_breakdown:
+        position = '下破子趋势下轨'
+        stance = '做空' if cand['kind'] == '下降通道' else '中性'
+    elif current >= mid:
+        position = '子趋势通道内靠近上轨'
+        stance = '中性'
+    else:
+        position = '子趋势通道内靠近下轨'
+        stance = '做空' if cand['kind'] == '下降通道' else '中性'
     return {
         'kind': cand['kind'],
-        'stance': '做空' if cand['kind'] == '下降通道' and current <= mid else '中性',
+        'stance': stance,
+        'position': position,
         'lower': float(lower),
         'upper': float(upper),
         'mid': float(mid),
-        'upper_breakout': float(upper + break_buffer),
-        'lower_breakdown': float(lower - break_buffer),
+        'upper_breakout': float(upper_breakout),
+        'lower_breakdown': float(lower_breakdown),
         'upper_line': upper_line,
         'lower_line': lower_line,
+        'break_idx': break_idx,
         'high_slope_pct': cand['high_slope'],
         'low_slope_pct': cand['low_slope'],
-        'reason': f'子趋势={cand["kind"]}，下轨/支撑 {_fmt_level(lower)}，上轨/阻力 {_fmt_level(upper)}',
+        'reason': f'子趋势={cand["kind"]}，{position}，下轨/支撑 {_fmt_level(lower)}，上轨/阻力 {_fmt_level(upper)}',
     }
 
 
@@ -1125,14 +1228,18 @@ def _crypto_market_architecture(rows):
         start_idx = selected['start_idx']
         mode = selected.get('mode', '摆点窗口')
         upper_line = _architecture_envelope_line(highs, end_idx, 'upper', upper, role='parent', direction_slope=low_slope)
-        lower_line = _architecture_envelope_line(lows, end_idx, 'lower', lower, role='parent', direction_slope=low_slope)
+        if mode == '底部趋势线':
+            lower_points = [lows[0], lows[-1]]
+            lower_line = _architecture_line(lower_points, lower_points[0]['idx'], end_idx, lower)
+        else:
+            lower_line = _architecture_envelope_line(lows, end_idx, 'lower', lower, role='parent', direction_slope=low_slope)
         upper = upper_line['points'][-1]['price']
         lower = lower_line['points'][-1]['price']
         high_slope = _architecture_line_slope_pct(upper_line)
         low_slope = _architecture_line_slope_pct(lower_line)
         kind = _architecture_kind(high_slope, low_slope, _candidate_width_pct(rows, start_idx, end_idx), threshold)
         if recent_probe and recent_probe['kind'] != kind:
-            sub_structure = _sub_structure_from_candidate(recent_probe, end_idx, current)
+            sub_structure = _sub_structure_from_candidate(recent_probe, end_idx, current, rows)
     else:
         highs = swings['highs'][-4:]
         lows = swings['lows'][-4:]
@@ -1187,7 +1294,7 @@ def _crypto_market_architecture(rows):
     ]
     if selected:
         if mode == '底部趋势线':
-            start_detail = f'底部趋势线从第{start_idx}根K线的关键低点开始，优先连接后续抬高的摆低'
+            start_detail = f'底部趋势线从第{start_idx}根K线的关键低点开始，连接最新有效回踩摆低'
         else:
             start_detail = f'结构线从第{start_idx}根K线附近的有效摆点开始，不向更早窗口反推'
         logic.insert(1, {'step': '起点', 'detail': start_detail})

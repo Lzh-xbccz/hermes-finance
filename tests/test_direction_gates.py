@@ -113,6 +113,109 @@ def rising_channel_from_capitulation_low_rows() -> list[dict[str, float | int | 
     return rows
 
 
+def channel_then_breakout_rows() -> list[dict[str, float | int | str]]:
+    rows = channel_rows(96, start_low=100, low_step=0.2, width=10, close_position=0.55)
+    for i in range(84, 96):
+        base = 118 + (i - 84) * 0.2
+        low = base
+        high = base + 10
+        close = base + 6
+        if i == 90:
+            low = 128
+            high = 165
+            close = 158
+        elif i >= 91:
+            low = 150 + (i - 91) * 1.0
+            high = low + 8
+            close = low + 6
+        rows[i].update({
+            "open": close - 1,
+            "high": high,
+            "low": low,
+            "close": close,
+        })
+    return rows
+
+
+def channel_then_breakdown_rows() -> list[dict[str, float | int | str]]:
+    rows = channel_rows(96, start_low=150, low_step=0.1, width=10, close_position=0.45)
+    for i in range(84, 96):
+        base = 158 + (i - 84) * 0.1
+        low = base
+        high = base + 10
+        close = base + 4
+        if i == 90:
+            low = 110
+            high = 150
+            close = 116
+        elif i >= 91:
+            high = 120 - (i - 91) * 1.0
+            low = high - 8
+            close = low + 2
+        rows[i].update({
+            "open": close + 1,
+            "high": high,
+            "low": low,
+            "close": close,
+        })
+    return rows
+
+
+def foundation_trend_with_broken_subtrend_rows() -> list[dict[str, float | int | str]]:
+    rows = []
+    highs = {
+        91: 400.46,
+        111: 482.20,
+        148: 544.28,
+        153: 534.50,
+        157: 520.00,
+        166: 477.09,
+        174: 479.79,
+    }
+    lows = {
+        86: 250.12,
+        94: 336.82,
+        106: 414.91,
+        142: 416.01,
+        151: 507.59,
+        154: 482.17,
+        160: 471.00,
+        169: 440.00,
+    }
+    for i in range(180):
+        base = 410 + i * 0.05
+        low = lows.get(i, base - 4)
+        high = highs.get(i, base + 4)
+        if i == 170:
+            high = 458.0
+            low = 438.0
+        if i == 171:
+            high = 454.0
+            low = 434.0
+        if i == 172:
+            high = 462.37
+            low = 444.53
+        if i == 173:
+            high = 459.21
+            low = 444.74
+        if i == 175:
+            high = 478.26
+            low = 465.62
+        if high <= low:
+            high = low + 8
+        close = low + (high - low) * 0.62
+        rows.append({
+            "ts": 1779393600000 + i * 14400000,
+            "time_utc": f"2026-06-{(i // 6) + 1:02d} {(i % 6) * 4:02d}:00",
+            "open": close - 0.3,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": 1000 + i,
+        })
+    return rows
+
+
 class DirectionGateTests(unittest.TestCase):
     def test_futures_requires_multidimension_confirmation(self) -> None:
         mod = load_module(
@@ -623,7 +726,9 @@ class DirectionGateTests(unittest.TestCase):
         self.assertEqual(arch["kind"], "上升通道")
         self.assertEqual(arch["structure_mode"], "底部趋势线")
         self.assertEqual(arch["lower_line"]["anchors"][0]["idx"], 36)
+        self.assertEqual(arch["lower_line"]["anchors"][-1]["idx"], 80)
         self.assertEqual(arch["lower_line"]["points"][0]["idx"], 36)
+        self.assertEqual(arch["position"], "通道内靠近下轨")
         self.assertIn("底部趋势线", "；".join(item["detail"] for item in arch["logic"]))
 
     def test_crypto_market_architecture_foundation_upper_uses_main_high_chain(self) -> None:
@@ -654,6 +759,48 @@ class DirectionGateTests(unittest.TestCase):
         self.assertGreaterEqual(len(arch["sub_structure"]["upper_line"]["points"]), 2)
         self.assertGreaterEqual(len(arch["sub_structure"]["lower_line"]["points"]), 2)
         self.assertTrue(any(item["step"] == "子趋势" for item in arch["logic"]))
+
+    def test_crypto_market_architecture_subtrend_breakout_does_not_rewrap(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_subtrend_breakout",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        cand = {
+            "kind": "下降通道",
+            "highs": [
+                {"idx": 153, "price": 534.50},
+                {"idx": 157, "price": 520.00},
+                {"idx": 166, "price": 477.09},
+                {"idx": 174, "price": 479.79},
+            ],
+            "lows": [
+                {"idx": 151, "price": 507.59},
+                {"idx": 154, "price": 482.17},
+                {"idx": 160, "price": 471.00},
+                {"idx": 169, "price": 440.00},
+            ],
+            "upper": 466.76,
+            "lower": 402.45,
+            "high_slope": -10.24,
+            "low_slope": -13.32,
+        }
+
+        rows = foundation_trend_with_broken_subtrend_rows()
+        sub = mod._sub_structure_from_candidate(cand, 179, 470.0, rows)
+        upper_line = sub["upper_line"]
+        lower_line = sub["lower_line"]
+
+        self.assertEqual(sub["kind"], "下降通道")
+        self.assertEqual(sub["position"], "上破子趋势上轨")
+        self.assertEqual(sub["break_idx"], 172)
+        self.assertNotIn(174, [p["idx"] for p in upper_line["anchors"]])
+        self.assertEqual([p["idx"] for p in lower_line["anchors"]], [151, 154, 169])
+        self.assertEqual(upper_line["points"][-1]["idx"], 172)
+        self.assertEqual(lower_line["points"][-1]["idx"], 172)
+        upper_at_break = mod._project_line(upper_line["anchors"], 172)
+        self.assertIsNotNone(upper_at_break)
+        self.assertGreater(462.37, upper_at_break)
+        self.assertGreater(454.12, upper_at_break)
 
     def test_crypto_market_architecture_falling_upper_uses_lower_high_chain(self) -> None:
         mod = load_module(
@@ -745,6 +892,34 @@ class DirectionGateTests(unittest.TestCase):
         self.assertGreater(high_slope, 1.0)
         self.assertLess(low_slope, -1.0)
         self.assertEqual(mod._architecture_kind(high_slope, low_slope, 30), "扩散震荡")
+
+    def test_crypto_market_architecture_breakout_does_not_rewrap_parent_rail(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_breakout_parent",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = channel_then_breakout_rows()
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["position"], "上破上轨")
+        self.assertEqual(arch["stance"], "做多")
+        self.assertGreater(rows[-1]["close"], arch["upper_breakout"])
+        self.assertNotIn(90, [p["idx"] for p in arch["upper_line"]["anchors"]])
+
+    def test_crypto_market_architecture_breakdown_does_not_rewrap_parent_rail(self) -> None:
+        mod = load_module(
+            "crypto_fetch_market_architecture_breakdown_parent",
+            ROOT / "skills" / "crypto-market-analysis" / "scripts" / "fetch_data.py",
+        )
+        rows = channel_then_breakdown_rows()
+
+        arch = mod._crypto_market_architecture(rows)
+
+        self.assertEqual(arch["position"], "下破下轨")
+        self.assertEqual(arch["stance"], "做空")
+        self.assertLess(rows[-1]["close"], arch["lower_breakdown"])
+        self.assertNotIn(90, [p["idx"] for p in arch["lower_line"]["anchors"]])
 
     def test_crypto_market_architecture_downtrend_parent_uses_peak_tail(self) -> None:
         mod = load_module(
