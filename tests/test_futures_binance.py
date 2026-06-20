@@ -190,6 +190,44 @@ class BinanceTradFiTests(unittest.TestCase):
         self.assertNotIn("突破后高点", html)
         self.assertNotIn("突破后回踩低点", html)
 
+    def test_futures_market_structure_chart_treats_single_lower_rail_break_as_unconfirmed(self) -> None:
+        rows = []
+        highs = {25: 90.0, 38: 96.0, 52: 103.0, 64: 110.0}
+        lows = {23: 80.0, 36: 86.0, 50: 93.0, 62: 100.0}
+        for i in range(76):
+            base = 82 + i * 0.35
+            low = lows.get(i, base - 1.0)
+            high = highs.get(i, base + 1.0)
+            close = low + (high - low) * 0.45
+            if i == 75:
+                high = 103.0
+                low = 95.0
+                close = 96.0
+            rows.append({
+                "ts": 1710000000 + i * 14400,
+                "time_utc": f"2026-06-{(i // 6) + 1:02d} {(i % 6) * 4:02d}:00",
+                "open": close + 0.2,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": 1000 + i,
+            })
+
+        payload = futures_chart.build_futures_structure_payload("CL", rows, "CLUSDT")
+        html = futures_chart.render_futures_structure_html(payload)
+
+        self.assertEqual(payload["architecture"]["kind"], "上升通道")
+        self.assertEqual(payload["architecture"]["position"], "下轨测试未确认")
+        self.assertEqual(payload["architecture"]["stance"], "观望")
+        self.assertIsNone(payload["architecture"]["break_idx"])
+        self.assertEqual(payload["architecture"]["rail_test_idx"], 75)
+        self.assertEqual(payload["lines"]["lower"][-1]["time"], rows[-1]["ts"])
+        self.assertEqual(payload["price_lines"], [])
+        self.assertIn("下轨测试未确认", html)
+        self.assertIn("需连续已收盘K线确认", html)
+        self.assertNotIn("下破后反抽高点", html)
+        self.assertNotIn("下破后低点", html)
+
 
 if __name__ == "__main__":
     unittest.main()

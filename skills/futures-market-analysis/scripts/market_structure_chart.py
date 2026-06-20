@@ -72,18 +72,112 @@ def _line_to_series(line, rows):
     ]
 
 
-def _first_parent_break_idx(rows, upper_line, lower_line, start_idx, end_idx, break_buffer):
-    for idx in range(max(0, int(start_idx)), int(end_idx) + 1):
+def _interval_seconds(interval):
+    text = str(interval or "").strip().lower()
+    if not text:
+        return 0
+    unit = text[-1]
+    try:
+        value = int(text[:-1])
+    except ValueError:
+        return 0
+    if unit == "m":
+        return value * 60
+    if unit == "h":
+        return value * 3600
+    if unit == "d":
+        return value * 86400
+    return 0
+
+
+def _last_closed_idx(rows, interval):
+    if not rows:
+        return -1
+    last_idx = len(rows) - 1
+    seconds = _interval_seconds(interval)
+    if seconds <= 0:
+        return last_idx
+    last_open = _time_at(rows, last_idx)
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    return last_idx - 1 if now_ts < last_open + seconds else last_idx
+
+
+def _confirmed_break_side(rows, upper_line, lower_line, idx, break_buffer):
+    upper = _line_value_at_idx(upper_line, idx)
+    lower = _line_value_at_idx(lower_line, idx)
+    if upper is None or lower is None:
+        return ""
+    close = _close(rows[idx])
+    if close > upper + break_buffer:
+        return "up"
+    if close < lower - break_buffer:
+        return "down"
+    return ""
+
+
+def _first_parent_break_idx(rows, upper_line, lower_line, start_idx, end_idx, break_buffer, channel_kind, confirm_bars=2):
+    start = max(0, int(start_idx))
+    end = int(end_idx)
+    if end - start + 1 < confirm_bars:
+        return None, ""
+    for idx in range(start, end - confirm_bars + 2):
+        side = _confirmed_break_side(rows, upper_line, lower_line, idx, break_buffer)
+        if not side:
+            continue
+        confirmed = True
+        for offset in range(1, confirm_bars):
+            if _confirmed_break_side(rows, upper_line, lower_line, idx + offset, break_buffer) != side:
+                confirmed = False
+                break
+        if not confirmed:
+            continue
+        if side == "up":
+            return idx, f"上破{channel_kind}上轨"
+        return idx, f"下破{channel_kind}下轨"
+    return None, ""
+
+
+def _latest_parent_rail_test(rows, upper_line, lower_line, start_idx, end_idx, break_buffer):
+    for idx in range(int(end_idx), max(0, int(start_idx)) - 1, -1):
         upper = _line_value_at_idx(upper_line, idx)
         lower = _line_value_at_idx(lower_line, idx)
         if upper is None or lower is None:
             continue
         row = rows[idx]
-        if _close(row) > upper + break_buffer or _high(row) > upper + break_buffer:
-            return idx, "上破下降通道上轨"
-        if _close(row) < lower - break_buffer or _low(row) < lower - break_buffer:
-            return idx, "下破上升通道下轨"
+        if _close(row) > upper + break_buffer:
+            return idx, "上轨测试未确认"
+        if _high(row) > upper + break_buffer and _close(row) <= upper + break_buffer:
+            return idx, "上轨刺破未确认"
+        if _close(row) < lower - break_buffer:
+            return idx, "下轨测试未确认"
+        if _low(row) < lower - break_buffer and _close(row) >= lower - break_buffer:
+            return idx, "下轨刺破未确认"
     return None, ""
+
+
+def _unconfirmed_arch_position(position):
+    if "上破" in position:
+        return "上轨测试未确认"
+    if "下破" in position:
+        return "下轨测试未确认"
+    return position
+
+
+def _fmt_optional_level(value):
+    if value is None:
+        return "-"
+    return _fmt_level(value)
+
+
+def _unconfirmed_reason(kind, status, lower, upper):
+    if "未确认" not in status:
+        return ""
+    side = "上轨" if "上轨" in status else "下轨" if "下轨" in status else "轨道边缘"
+    return (
+        f"市场架构={kind}，{side}测试未确认，"
+        f"下轨/支撑 {_fmt_optional_level(lower)}，上轨/阻力 {_fmt_optional_level(upper)}；"
+        "需连续已收盘K线确认，或收回通道内。"
+    )
 
 
 def _last_anchor_idx(line):
@@ -91,7 +185,7 @@ def _last_anchor_idx(line):
     return max((int(p.get("idx", 0)) for p in anchors), default=None)
 
 
-def _structure_markers(upper_line, lower_line, rows, break_idx, break_position):
+def _structure_markers(upper_line, lower_line, rows, break_idx, break_position, rail_test_idx=None, rail_test_position=""):
     markers = []
     for anchor in upper_line.get("anchors", []):
         markers.append({
@@ -118,6 +212,15 @@ def _structure_markers(upper_line, lower_line, rows, break_idx, break_position):
             "shape": "arrowUp" if is_up_break else "arrowDown",
             "text": break_position,
         })
+    elif rail_test_idx is not None:
+        is_upper_test = "上轨" in rail_test_position
+        markers.append({
+            "time": _time_at(rows, rail_test_idx),
+            "position": "aboveBar" if is_upper_test else "belowBar",
+            "color": "#F59E0B",
+            "shape": "circle",
+            "text": rail_test_position,
+        })
     return sorted(markers, key=lambda x: x["time"])
 
 
@@ -141,19 +244,35 @@ def build_futures_structure_payload(symbol, rows, binance_symbol=None, interval=
     lower_line = arch.get("lower_line", {})
     break_idx = None
     break_position = ""
+    rail_test_idx = None
+    rail_test_position = ""
     break_buffer = float(arch.get("break_buffer", 0.0))
     end_idx = len(rows) - 1
+    confirmed_end_idx = _last_closed_idx(rows, interval)
+    latest_upper = _line_value_at_idx(upper_line, end_idx)
+    latest_lower = _line_value_at_idx(lower_line, end_idx)
     anchor_idxs = [idx for idx in [_last_anchor_idx(upper_line), _last_anchor_idx(lower_line)] if idx is not None]
     last_anchor = max(anchor_idxs) if anchor_idxs else None
     if arch.get("kind") in {"下降通道", "上升通道"}:
+        scan_start = (last_anchor + 1) if last_anchor is not None else 0
         break_idx, break_position = _first_parent_break_idx(
             rows,
             upper_line,
             lower_line,
-            (last_anchor + 1) if last_anchor is not None else 0,
-            end_idx,
+            scan_start,
+            confirmed_end_idx,
             break_buffer,
+            arch.get("kind", "通道"),
         )
+        if break_idx is None:
+            rail_test_idx, rail_test_position = _latest_parent_rail_test(
+                rows,
+                upper_line,
+                lower_line,
+                scan_start,
+                end_idx,
+                break_buffer,
+            )
     if break_idx is not None:
         upper_line = _truncate_line_to_idx(upper_line, break_idx)
         lower_line = _truncate_line_to_idx(lower_line, break_idx)
@@ -172,7 +291,9 @@ def build_futures_structure_payload(symbol, rows, binance_symbol=None, interval=
     retest_low = min(_low(r) for r in recent_after)
     post_high = max(_high(r) for r in recent_after)
     last = float(_close(rows[-1]))
-    status = break_position or arch["position"]
+    status = break_position or rail_test_position or _unconfirmed_arch_position(arch["position"])
+    stance = "观望" if "未确认" in status else arch["stance"]
+    reason = _unconfirmed_reason(arch["kind"], status, latest_lower, latest_upper) or arch["reason"]
     if break_idx is not None and "上破" in break_position:
         summary_note = "旧通道已在首次上破处截断；后续按上破后回踩/延续观察，不再把过期通道延伸到最新K线。"
         post_high_title = "上破后高点"
@@ -194,7 +315,7 @@ def build_futures_structure_payload(symbol, rows, binance_symbol=None, interval=
         "last_price": last,
         "last_price_text": _fmt_level(last),
         "candles": candles,
-        "markers": _structure_markers(upper_line, lower_line, rows, break_idx, break_position),
+        "markers": _structure_markers(upper_line, lower_line, rows, break_idx, break_position, rail_test_idx, rail_test_position),
         "lines": {
             "upper": _line_to_series(upper_line, rows),
             "lower": _line_to_series(lower_line, rows),
@@ -205,15 +326,22 @@ def build_futures_structure_payload(symbol, rows, binance_symbol=None, interval=
         ] if break_idx is not None else [],
         "architecture": {
             "kind": arch["kind"],
-            "stance": arch["stance"],
+            "stance": stance,
             "position": status,
             "break_idx": break_idx,
             "break_time_text": _utc_text_at(rows, break_idx) if break_idx is not None else "",
+            "rail_test_idx": rail_test_idx,
+            "rail_test_time_text": _utc_text_at(rows, rail_test_idx) if rail_test_idx is not None else "",
+            "event_time_text": (
+                _utc_text_at(rows, break_idx)
+                if break_idx is not None
+                else _utc_text_at(rows, rail_test_idx) if rail_test_idx is not None else ""
+            ),
             "old_upper": float(upper_line.get("points", [{}])[-1].get("price", 0.0)),
             "old_lower": float(lower_line.get("points", [{}])[-1].get("price", 0.0)),
             "post_high": float(post_high),
             "retest_low": float(retest_low),
-            "reason": arch["reason"],
+            "reason": reason,
             "logic": arch.get("logic", []),
             "note": summary_note,
         },
@@ -351,7 +479,7 @@ HTML_TEMPLATE = """<!doctype html>
     byId("last").textContent = "Last " + payload.last_price_text;
     byId("badge").textContent = arch.position;
     byId("last-price").textContent = payload.last_price_text;
-    byId("break-time").textContent = arch.break_time_text || "-";
+    byId("break-time").textContent = arch.event_time_text || arch.break_time_text || arch.rail_test_time_text || "-";
     byId("old-upper").textContent = fmt(arch.old_upper);
     byId("old-lower").textContent = fmt(arch.old_lower);
     byId("post-high").textContent = fmt(arch.post_high);
