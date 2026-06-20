@@ -9,6 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 FETCH_PATH = ROOT / "skills" / "futures-market-analysis" / "scripts" / "futures_fetch.py"
 ANALYZE_PATH = ROOT / "skills" / "futures-market-analysis" / "scripts" / "futures_analyze.py"
+CHART_PATH = ROOT / "skills" / "futures-market-analysis" / "scripts" / "market_structure_chart.py"
 
 
 def load_module(name: str, path: Path):
@@ -21,6 +22,7 @@ def load_module(name: str, path: Path):
 
 futures_fetch = load_module("futures_fetch_test", FETCH_PATH)
 futures_analyze = load_module("futures_analyze_test", ANALYZE_PATH)
+futures_chart = load_module("futures_market_structure_chart_test", CHART_PATH)
 
 
 def kline(ts_ms: int, open_: str, high: str, low: str, close: str) -> list[object]:
@@ -119,6 +121,40 @@ class BinanceTradFiTests(unittest.TestCase):
         self.assertIn("Binance CLUSDT TradFi Perp K线", report)
         self.assertIn("Binance TradFi 永续", report)
         self.assertIn("CLUSDT", report)
+
+    def test_futures_market_structure_chart_truncates_broken_channel_without_volume_background(self) -> None:
+        rows = []
+        highs = {25: 100.0, 38: 94.0, 52: 88.0, 64: 80.0, 70: 79.0}
+        lows = {23: 95.0, 36: 88.0, 50: 82.0, 62: 74.0, 66: 72.0}
+        for i in range(76):
+            base = 99 - i * 0.35
+            low = lows.get(i, base - 1.0)
+            high = highs.get(i, base + 1.0)
+            if i >= 67:
+                low = 74 + (i - 67) * 0.45
+                high = low + 2.4
+            close = low + (high - low) * 0.55
+            if i >= 70:
+                close = high - 0.3
+            rows.append({
+                "ts": 1710000000 + i * 14400,
+                "time_utc": f"2026-06-{(i // 6) + 1:02d} {(i % 6) * 4:02d}:00",
+                "open": close - 0.2,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": 1000 + i,
+            })
+
+        payload = futures_chart.build_futures_structure_payload("CL", rows, "CLUSDT")
+        html = futures_chart.render_futures_structure_html(payload)
+
+        self.assertEqual(payload["architecture"]["kind"], "下降通道")
+        self.assertIn("上破", payload["architecture"]["position"])
+        self.assertIsNotNone(payload["architecture"]["break_idx"])
+        self.assertEqual(payload["lines"]["upper"][-1]["time"], rows[payload["architecture"]["break_idx"]]["ts"])
+        self.assertNotIn("addHistogramSeries", html)
+        self.assertIn("无成交量背景", html)
 
 
 if __name__ == "__main__":
