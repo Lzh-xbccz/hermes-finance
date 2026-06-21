@@ -1588,54 +1588,6 @@ def directional_evidence(data):
     return _dimensionize_votes(votes, _crypto_dimension)
 
 
-def direction_from_evidence(votes):
-    if votes.get('veto'):
-        return '观望'
-    missing_core = {'技术结构', '合约结构'} & set(votes.get('missing', []))
-    if missing_core:
-        return '观望'
-    long_count = len(votes['做多'])
-    short_count = len(votes['做空'])
-    if long_count >= 3 and long_count - short_count >= 2 and not votes.get('veto_long'):
-        return '做多'
-    if short_count >= 3 and short_count - long_count >= 2 and not votes.get('veto_short'):
-        return '做空'
-    return '观望'
-
-
-def direction_quality_text(votes):
-    return (
-        f"多头独立维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
-        f"空头独立维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
-        f"中性/缺失：{'; '.join(votes['neutral'] + votes.get('missing', [])) or '无'}；"
-        f"硬性降级：{'; '.join(votes['veto']) or '无'}；"
-        f"禁止追多：{'; '.join(votes.get('veto_long', [])) or '无'}；"
-        f"禁止追空：{'; '.join(votes.get('veto_short', [])) or '无'}"
-    )
-
-
-def counter_audit_text(final_direction, votes):
-    long_count = len(votes['做多'])
-    short_count = len(votes['做空'])
-    if votes.get('veto'):
-        return '存在硬性降级项，最终观望'
-    if {'技术结构', '合约结构'} & set(votes.get('missing', [])):
-        return '核心维度缺失，最终观望'
-    if final_direction == '观望' and votes.get('veto_long') and long_count > short_count:
-        return '多头证据虽占优，但合约/情绪存在禁止追多项，最终观望'
-    if final_direction == '观望' and votes.get('veto_short') and short_count > long_count:
-        return '空头证据虽占优，但合约/情绪存在禁止追空项，最终观望'
-    if final_direction == '做多':
-        return '最强空头证据：' + ('；'.join(votes['做空']) if votes['做空'] else '无同等级反证')
-    if final_direction == '做空':
-        return '最强多头证据：' + ('；'.join(votes['做多']) if votes['做多'] else '无同等级反证')
-    if long_count == short_count:
-        return '多空维度数量相同，方向质量不足，最终观望'
-    if abs(long_count - short_count) < 2:
-        return '多空维度差距小于 2 项，未通过方向质量门槛，最终观望'
-    return '同向维度少于 3 项，未形成可执行方向优势，最终观望'
-
-
 def _optional_fetch(url, timeout=10):
     try:
         return fetch(url, timeout)
@@ -1777,16 +1729,40 @@ def collect_direction_snapshot(coin_id):
 
 
 def block_direction_gate(coin_id):
-    print('=== 方向质量门槛（独立维度） ===')
+    print('=== 多维证据清单（方向由 AI 综合判断） ===')
     data = collect_direction_snapshot(coin_id)
-    votes = directional_evidence(data)
-    direction = direction_from_evidence(votes)
-    label = '🟢 做多' if direction == '做多' else '🔴 做空' if direction == '做空' else '⚪ 观望'
-    print(f'最终方向建议: {label}')
-    print(direction_quality_text(votes))
-    print('反向审计: ' + counter_audit_text(direction, votes))
-    if direction == '观望':
-        print('执行结论: 当前不强行开仓，只给触发条件；CZSC 只能确认或降级，不能覆盖本门槛。')
+    evidence = directional_evidence(data)
+
+    dimensions = evidence.get('dimensions', {})
+    if dimensions:
+        print('各维度证据：')
+        for name, info in dimensions.items():
+            stance = info.get('stance', '中性')
+            reasons = '；'.join(info.get('reasons', []))
+            print(f'  [{stance}] {name}：{reasons}')
+
+    neutral = evidence.get('neutral', [])
+    if neutral:
+        print('中性维度：')
+        for item in neutral:
+            print(f'  {item}')
+
+    for key, label in (('veto', '硬性约束（禁止硬给方向）'),
+                       ('veto_long', '禁止追多'),
+                       ('veto_short', '禁止追空')):
+        items = evidence.get(key, [])
+        if items:
+            print(f'{label}：')
+            for item in items:
+                print(f'  {item}')
+
+    missing = evidence.get('missing', [])
+    if missing:
+        print('数据缺失：')
+        for item in missing:
+            print(f'  {item}')
+
+    print('说明：以上为采集的结构化证据，不包含方向决策。请基于各维度证据综合判断方向；证据不足或冲突时，观望/震荡是合法且优先的结论。')
 
 
 # ─── 主入口 ───

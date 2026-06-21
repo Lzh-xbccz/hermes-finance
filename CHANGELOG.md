@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## v1.3.0 (2026-06-21) — Crypto 移除投票决策，改为 AI 综合判断
+
+### 变更
+
+- 移除 crypto `fetch_data.py` 中的投票计数决策函数：`direction_from_evidence`、`direction_quality_text`、`counter_audit_text`。脚本不再用"做多≥3且领先≥2"这类票数门槛强制决定方向。
+- `block_direction_gate` 改为输出结构化证据清单：各维度证据（维度名 + stance + reasons）、中性维度、硬性约束（veto/禁止追多/禁止追空）、数据缺失项。明确标注"不包含方向决策，由 AI 综合判断"。
+- formatter 分析契约改写：去掉"七维主判断（写明权重）"和"方向质量门槛（至少3个维度支持、领先2个）"等投票计数要求，改为"各维度证据（不要用投票计数或权重打分决定方向）"和"最终方向必须由你基于各维度证据综合判断得出"。
+- Decision rule 改为 "synthesize the collected evidence yourself... Do not count votes or apply weight scores"。
+
+### 保留
+
+- 数据采集（`collect_direction_snapshot`）、各维度证据提取（`directional_evidence` 返回 dimensions 字典）、硬性约束标记（数据异常安全阀，非投票）、数据缺失标注、缠论引擎（CZSC 作为第 8 维确认）。
+
+### 影响范围
+
+- 仅 crypto 市场。futures/forex/us_equity/a_share 的 `*_analyze.py` 仍保留投票逻辑，待后续推广。
+
+### 验证
+
+- `python3 -m compileall -q hermes_finance hermes_finance_mcp scripts skills tests bin`
+- `python3 -m unittest discover` — 58/58 通过
+
 ## v1.2.13 (2026-06-19) — Crypto 趋势矩阵补强
 
 ### 修复

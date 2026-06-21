@@ -489,7 +489,6 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data)
         self.assertEqual(len(votes["做多"]), 1)
         self.assertIn("合约结构", votes["做多"][0])
-        self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
     def test_crypto_macro_proxies_count_as_one_dimension(self) -> None:
         mod = load_module(
@@ -518,7 +517,6 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data)
         self.assertEqual(len(votes["做多"]), 1)
         self.assertIn("宏观/风险偏好", votes["做多"][0])
-        self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
     def test_crypto_news_events_count_as_one_dimension(self) -> None:
         mod = load_module(
@@ -549,7 +547,6 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data)
         self.assertEqual(len(votes["做多"]), 1)
         self.assertIn("新闻/事件基本面", votes["做多"][0])
-        self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
     def test_crypto_mixed_news_events_are_neutral(self) -> None:
         mod = load_module(
@@ -611,7 +608,6 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data)
         self.assertGreaterEqual(len(votes["做多"]), 3)
         self.assertTrue(votes["veto_long"])
-        self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
     def test_crypto_requires_core_dimensions(self) -> None:
         mod = load_module(
@@ -634,7 +630,6 @@ class DirectionGateTests(unittest.TestCase):
 
         votes = mod.directional_evidence(data)
         self.assertIn("合约结构", votes["missing"])
-        self.assertEqual(mod.direction_from_evidence(votes), "观望")
 
     def test_crypto_technical_neutral_is_not_missing_when_4h_pattern_votes(self) -> None:
         mod = load_module(

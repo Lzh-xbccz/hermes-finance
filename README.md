@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v1.2.13-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
+[![Version](https://img.shields.io/badge/version-v1.3.0-green.svg)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 [![Releases](https://img.shields.io/github/v/release/Lzh-xbccz/hermes-finance?include_prereleases&label=latest)](https://github.com/Lzh-xbccz/hermes-finance/releases)
 
 面向 AI Agent 的多市场金融分析框架。你可以直接对 Claude Code、Codex、Cursor、Gemini、Roo、Cline 等工具说“分析 BTC”或“EURUSD 现在怎么看”，Hermes Finance 会自动识别市场、采集数据、生成结构化分析报告。
@@ -215,6 +215,8 @@ hermes-finance/
 完整日志见 [Releases](https://github.com/Lzh-xbccz/hermes-finance/releases) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 技术结构逻辑图和 HTML 形态图说明见 [docs/TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md)。
+
+**v1.3.0** — Crypto 移除投票决策：脚本只采集各维度证据，方向由 AI 综合判断
 
 **v1.2.13** — Crypto 趋势矩阵补强：扩散震荡遇到主高点后回调时保留父级上轨延伸，真正下降反转仍走峰值后下降链
 

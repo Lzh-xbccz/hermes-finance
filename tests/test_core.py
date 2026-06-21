@@ -104,8 +104,7 @@ class FormatterTests(unittest.TestCase):
         }
         markdown = format_market_result(result)
         self.assertIn("## Crypto Analysis Contract", markdown)
-        self.assertIn("七维主判断", markdown)
-        self.assertIn("方向质量门槛", markdown)
+        self.assertIn("各维度证据", markdown)
         self.assertIn("反向审计", markdown)
         self.assertIn("缠论确认", markdown)
         self.assertIn("八维深挖", markdown)
@@ -128,11 +127,11 @@ class FormatterTests(unittest.TestCase):
         markdown = format_market_result(result)
         self.assertIn("## Eight-Dimension Analysis Contract", markdown)
         self.assertIn("可执行合约层/OI/资金费率", markdown)
-        self.assertIn("方向质量门槛", markdown)
+        self.assertIn("各维度证据", markdown)
         self.assertIn("反向审计", markdown)
         self.assertIn("缠论确认", markdown)
         self.assertIn("CZSC score", markdown)
-        self.assertIn("dimensions 1-7", markdown)
+        self.assertIn("synthesize the collected evidence", markdown)
         self.assertIn("CZSC Report", markdown)
 
 
