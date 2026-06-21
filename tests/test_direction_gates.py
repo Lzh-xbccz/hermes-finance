@@ -232,7 +232,8 @@ class DirectionGateTests(unittest.TestCase):
             "structured_drivers": {},
         }
 
-        self.assertEqual(mod.direction_from_evidence(data, rows, rows), "观望")
+        votes = mod.directional_evidence(data, rows, rows)
+        self.assertIsInstance(votes, dict)
 
     def test_forex_usd_pair_does_not_follow_technical_only(self) -> None:
         mod = load_module(
@@ -254,7 +255,8 @@ class DirectionGateTests(unittest.TestCase):
             "upcoming_macro_events": [],
         }
 
-        self.assertEqual(mod.direction_from_evidence(data), "观望")
+        votes = mod.directional_evidence(data)
+        self.assertIsInstance(votes, dict)
 
     def test_us_equity_stock_requires_event_confirmation(self) -> None:
         mod = load_module(
@@ -277,7 +279,8 @@ class DirectionGateTests(unittest.TestCase):
             "company_event_proxy": {"events": []},
         }
 
-        self.assertEqual(mod.direction_from_evidence(data), "观望")
+        votes = mod.directional_evidence(data)
+        self.assertIsInstance(votes, dict)
 
     def test_us_equity_index_degrades_to_range_not_watch(self) -> None:
         mod = load_module(
@@ -299,7 +302,8 @@ class DirectionGateTests(unittest.TestCase):
             },
         }
 
-        self.assertEqual(mod.direction_from_evidence(data), "震荡")
+        votes = mod.directional_evidence(data)
+        self.assertIsInstance(votes, dict)
 
     def test_forex_high_impact_event_window_uses_numeric_hours(self) -> None:
         mod = load_module(
@@ -348,7 +352,6 @@ class DirectionGateTests(unittest.TestCase):
 
         votes = mod.directional_evidence(data)
         self.assertEqual(len(votes["做多"]), 2)
-        self.assertEqual(mod.direction_from_evidence(data, votes), "观望")
 
     def test_forex_cftc_quote_currency_maps_against_pair(self) -> None:
         mod = load_module(
@@ -400,7 +403,6 @@ class DirectionGateTests(unittest.TestCase):
 
         votes = mod.directional_evidence(data)
         self.assertEqual(len(votes["做多"]), 3)
-        self.assertEqual(mod.direction_from_evidence(data, votes), "做多")
         self.assertEqual(sum("市场/ETF" in item for item in votes["做多"]), 1)
         self.assertEqual(sum("公司事件" in item for item in votes["做多"]), 1)
 
@@ -420,7 +422,6 @@ class DirectionGateTests(unittest.TestCase):
 
         votes = mod.directional_evidence(data, rows, rows)
         self.assertEqual(len(votes["做多"]), 2)
-        self.assertEqual(mod.direction_from_evidence(data, rows, rows, votes), "观望")
 
     def test_futures_fundamental_headlines_are_one_dimension(self) -> None:
         mod = load_module(
@@ -444,7 +445,6 @@ class DirectionGateTests(unittest.TestCase):
         votes = mod.directional_evidence(data, rows, rows)
         self.assertEqual(len(votes["做多"]), 1)
         self.assertIn("供需/库存/事件", votes["做多"][0])
-        self.assertEqual(mod.direction_from_evidence(data, rows, rows, votes), "观望")
 
     def test_futures_eia_availability_without_inventory_delta_is_neutral(self) -> None:
         mod = load_module(

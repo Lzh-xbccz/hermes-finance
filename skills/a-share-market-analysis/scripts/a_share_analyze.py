@@ -267,44 +267,29 @@ def direction_from_score(score: int, status_text: str) -> str:
     return "震荡"
 
 
-def direction_from_evidence(scores: Dict[str, int], status_text: str) -> str:
-    """Use a conservative multi-dimension gate instead of raw score only."""
-
-    positive = [name for name, value in scores.items() if value > 0]
-    negative = [name for name, value in scores.items() if value < 0]
-    hard_missing_or_closed = "休市" in status_text or "未知" in status_text
-    if hard_missing_or_closed and abs(len(positive) - len(negative)) < 3:
-        return "震荡"
-    if len(positive) >= 4 and len(positive) - len(negative) >= 2:
-        return "偏多"
-    if len(negative) >= 4 and len(negative) - len(positive) >= 2:
-        return "偏空"
-    return "震荡"
-
-
-def direction_quality_text(scores: Dict[str, int]) -> str:
+def evidence_summary_text(scores: Dict[str, int]) -> str:
+    """逐项列出各维度证据，不做方向决策。"""
     positive = [name for name, value in scores.items() if value > 0]
     negative = [name for name, value in scores.items() if value < 0]
     neutral = [name for name, value in scores.items() if value == 0]
     return (
-        f"偏多维度 {len(positive)} 项：{', '.join(positive) or '无'}；"
-        f"偏空维度 {len(negative)} 项：{', '.join(negative) or '无'}；"
-        f"中性/缺失维度：{', '.join(neutral) or '无'}"
+        f"偏多维度 {len(positive)} 项：{'; '.join(positive) or '无'}；"
+        f"偏空维度 {len(negative)} 项：{'; '.join(negative) or '无'}；"
+        f"中性/缺失：{'; '.join(neutral) or '无'}"
     )
 
 
-def counter_audit_text(direction: str, scores: Dict[str, int]) -> str:
+def counter_evidence_text(scores: Dict[str, int]) -> str:
+    """列出最强反方向证据，不做方向决策。"""
     positive = [name for name, value in scores.items() if value > 0]
     negative = [name for name, value in scores.items() if value < 0]
-    if direction == "偏多":
-        return "最强偏空维度：" + (", ".join(negative) if negative else "无同等级反证")
-    if direction == "偏空":
-        return "最强偏多维度：" + (", ".join(positive) if positive else "无同等级反证")
-    if len(positive) == len(negative):
-        return "多空维度数量相同，方向质量不足，最终震荡"
-    if abs(len(positive) - len(negative)) < 2:
-        return "多空维度差距小于 2 项，未通过方向质量门槛，最终震荡"
-    return "同向维度少于 4 项，未形成方向优势，最终震荡"
+    if positive and negative:
+        return f"最强空头证据：{'; '.join(negative)}；最强多头证据：{'; '.join(positive)}"
+    if positive:
+        return f"无同等级反证；多头证据：{'; '.join(positive)}"
+    if negative:
+        return f"无同等级反证；空头证据：{'; '.join(negative)}"
+    return '多空均无强证据'
 
 
 def render_report(data: Dict[str, Any]) -> str:
@@ -314,7 +299,7 @@ def render_report(data: Dict[str, Any]) -> str:
     today_type = "假期/盘后观察" if "休市" in status_text else classify_today(sh_rows)
     scores = score_breakdown(data)
     score = sum(scores.values())
-    direction = direction_from_evidence(scores, status_text)
+    direction = None
     industry_rows = data.get("board_flows", {}).get("industry", {}).get("rows", [])
     concept_rows = data.get("board_flows", {}).get("concept", {}).get("rows", [])
     region_rows = data.get("board_flows", {}).get("region", {}).get("rows", [])
@@ -397,9 +382,9 @@ def render_report(data: Dict[str, Any]) -> str:
         lines.append("- 可用硬新闻不足，暂不纳入方向判断")
     lines.append("")
     lines.append("### 🎯 综合研判")
-    lines.append(f"- 方向：**{direction}**")
-    lines.append(f"- 方向质量门槛：{direction_quality_text(scores)}")
-    lines.append(f"- 反向审计：{counter_audit_text(direction, scores)}")
+    lines.append("- 方向：由 AI 综合判断")
+    lines.append(f"- 各维度证据：{evidence_summary_text(scores)}")
+    lines.append(f"- 反向审计：{counter_evidence_text(scores)}")
     lines.append(f"- 内部评分：{score:+d}")
     lines.append(f"- 分项评分：技术{scores['technical']:+d} / 北向{scores['northbound']:+d} / 广度{scores['breadth']:+d} / 板块{scores['boards']:+d} / 宏观{scores['macro']:+d}" + (f" / 个股{scores['stock']:+d}" if stock else ""))
     lines.append("- 风险提示：A 股为 T+1，当前分析更适合次日预判；节假日/休市期间的‘实时资金’默认降权处理。")

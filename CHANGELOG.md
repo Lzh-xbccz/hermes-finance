@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## v1.3.1 (2026-06-21) — 全市场移除投票决策，同步 SKILL.md 契约
+
+### 变更
+
+- **SKILL.md 全量同步**：修复 v1.3.0 遗留问题，将 crypto/futures/forex/us_equity/a_share/multi-market 6 个 SKILL.md 中的投票计数描述（"至少 3 个独立维度同向""领先反向至少 2 个维度""方向质量门槛""七维主判断"）全部替换为"各维度证据（不要用投票计数或权重打分决定方向）"。此前 SKILL.md 与 v1.3.0 formatter 契约矛盾，AI 会收到相互冲突的指令。
+- **4 个市场 `*_analyze.py` 移除投票决策函数**：futures/forex/us_equity/a_share 各自删除 `direction_from_evidence`、`direction_quality_text`、`counter_audit_text` 三个函数，新增 `evidence_summary_text`、`counter_evidence_text` 两个证据输出函数。调用点从"决定方向"改为"输出证据清单"，方向显示改为"由 AI 综合判断"。4 个脚本的输出标题 `### 七维主判断` 同步改为 `### 各维度证据`。
+- **MCP server prompts 同步**：`hermes_finance_mcp/server.py` 中 `deep_market_analysis`、`eight_dimension_analysis`、`crypto_eight_dimension_analysis` 三个 prompt 的输出清单和方向判断指令从"七维主判断/方向质量门槛"改为"各维度证据/方向判断依据"，并明确"不要用投票计数或权重打分决定方向"。
+- **AI 客户端配置同步**：`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`docs/USAGE.md`、`docs/AI_CLIENTS.md` 中的"七维主判断/方向质量门槛"全部替换为"各维度证据/方向判断依据"，并补充"方向由 AI 基于证据逻辑强度综合判断，不用投票计数或权重打分"。
+- **参考文档同步**：`forex-six-dimensions.md`、`futures-six-dimensions.md`、`us-equity-six-dimensions.md`、`commodity-analysis.md` 中的"七维主判断/方向质量门槛"标题和描述同步更新为"各维度证据/方向判断依据"。
+- **README.md 同步**：第四步"七维投票"改为"七维证据采集"，第五步"过方向质量门槛"改为"AI 综合判断方向"，结论输出清单和版本日志同步更新。
+- **测试同步**：`test_direction_gates.py` 删除 8 处对 `direction_from_evidence` 的方向断言，保留 `directional_evidence` 的证据结构断言。
+- **docstring 修复**：crypto `fetch_data.py` 顶部 docstring 补全 `resolve` 和 `direction` 两个 block。
+
+### 保留
+
+- 证据采集函数（`directional_evidence`）、votes/scores 字典结构、硬性约束标记（veto/veto_long/veto_short，数据异常安全阀）、缠论引擎（CZSC 作为第 8 维确认）。
+- 数据流架构不变：service.py 返回原始数据 + CZSC 文本，AI 自行综合判断（`_analysis_notes` 明确的设计意图）。
+
+### 影响范围
+
+- 全市场（crypto/futures/forex/us_equity/a_share）的 SKILL.md、`*_analyze.py`、参考文档。
+- MCP server prompts、AI 客户端配置（AGENTS.md/CLAUDE.md/GEMINI.md/docs/USAGE.md/docs/AI_CLIENTS.md）、README.md。
+- `*_analyze.py` 是独立 CLI 工具，不被 MCP/service 调用，所以 MCP 用户行为不变；独立 CLI 用户会看到"由 AI 综合判断"而非强制方向。
+
+### 验证
+
+- `python3 -m compileall -q skills hermes_finance hermes_finance_mcp` 通过
+- `python3 -m pytest tests/` — 58/58 通过
 
 ## v1.3.0 (2026-06-21) — Crypto 移除投票决策，改为 AI 综合判断
 

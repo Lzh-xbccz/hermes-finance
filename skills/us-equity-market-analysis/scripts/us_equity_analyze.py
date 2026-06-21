@@ -234,49 +234,29 @@ def _neutral_direction(data: Dict[str, Any]) -> str:
     return "震荡" if data.get("instrument_type") == "index" else "观望"
 
 
-def direction_from_evidence(data: Dict[str, Any], votes: Dict[str, List[str]] | None = None) -> str:
-    votes = votes or directional_evidence(data)
-    if votes["veto"]:
-        return _neutral_direction(data)
-    long_count = len(votes["做多"])
-    short_count = len(votes["做空"])
-    if data.get("instrument_type") == "index":
-        if long_count >= 3 and long_count - short_count >= 2:
-            return "偏多"
-        if short_count >= 3 and short_count - long_count >= 2:
-            return "偏空"
-        return "震荡"
-    if long_count >= 3 and long_count - short_count >= 2:
-        return "做多"
-    if short_count >= 3 and short_count - long_count >= 2:
-        return "做空"
-    return _neutral_direction(data)
-
-
-def direction_quality_text(votes: Dict[str, List[str]]) -> str:
+def evidence_summary_text(votes: Dict[str, List[str]]) -> str:
+    """逐项列出各维度证据，不做方向决策。"""
     return (
-        f"多头独立维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
-        f"空头独立维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
+        f"偏多维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
+        f"偏空维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
         f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
         f"硬性降级：{'; '.join(votes['veto']) or '无'}"
     )
 
 
-def counter_audit_text(final_direction: str, votes: Dict[str, List[str]]) -> str:
-    long_count = len(votes["做多"])
-    short_count = len(votes["做空"])
-    neutral_label = "震荡" if final_direction == "震荡" else "观望"
-    if votes["veto"]:
-        return f"存在硬性降级项，最终方向降为{neutral_label}"
-    if final_direction in {"做多", "偏多"}:
-        return "最强空头证据：" + ("；".join(votes["做空"]) if votes["做空"] else "无同等级反证")
-    if final_direction in {"做空", "偏空"}:
-        return "最强多头证据：" + ("；".join(votes["做多"]) if votes["做多"] else "无同等级反证")
-    if long_count == short_count:
-        return f"多空证据数量相同，方向质量不足，最终{neutral_label}"
-    if abs(long_count - short_count) < 2:
-        return f"多空证据差距小于 2 项，未通过方向质量门槛，最终{neutral_label}"
-    return f"同向维度少于 3 项，未形成可执行方向优势，最终{neutral_label}"
+def counter_evidence_text(votes: Dict[str, List[str]]) -> str:
+    """列出最强反方向证据，不做方向决策。"""
+    if votes.get('veto'):
+        return '存在硬性降级项：' + '；'.join(votes['veto'])
+    long_reasons = votes['做多']
+    short_reasons = votes['做空']
+    if long_reasons and short_reasons:
+        return f"最强空头证据：{'; '.join(short_reasons)}；最强多头证据：{'; '.join(long_reasons)}"
+    if long_reasons:
+        return f"无同等级反证；多头证据：{'; '.join(long_reasons)}"
+    if short_reasons:
+        return f"无同等级反证；空头证据：{'; '.join(short_reasons)}"
+    return '多空均无强证据'
 
 
 def driver_summary(data: Dict[str, Any]) -> str:
@@ -313,7 +293,7 @@ def build_report(data: Dict[str, Any]) -> str:
     h4 = data["agg_4h_10d"]
     h1 = data["hourly_10d"]
     votes = directional_evidence(data)
-    side = direction_from_evidence(data, votes)
+    side = None
     pattern = classify_pattern(h4) if h4 else "数据不足"
     today = classify_today(h1[-24:] if len(h1) >= 24 else h1) if h1 else "数据不足"
     actions = recent_key_actions(h4 or daily)
@@ -323,8 +303,6 @@ def build_report(data: Dict[str, Any]) -> str:
     resistance = levels["resistance"]
     last = (h1[-1]["close"] if h1 else daily[-1]["close"]) if daily else 0.0
     gaps = key_block_gaps(data)
-    if gaps or structure["stance"] == "结构模糊":
-        side = _neutral_direction(data)
     completeness_parts = []
     if gaps:
         completeness_parts.append("关键缺口：" + "、".join(gaps))
@@ -335,12 +313,12 @@ def build_report(data: Dict[str, Any]) -> str:
     if data["instrument_type"] == "index":
         lines.insert(0, f"## 📈 {data['symbol']} 指数偏向")
         lines.extend([
-            f"**结论**：{side}",
+            f"**结论**：由 AI 综合判断",
             f"**数据完整性**：{completeness}",
             "**宏观时效性**：若处于美股常规时段外，现金指数与 ETF 联动仅作背景过滤",
             f"**主导因子**：{driver_summary(data)}",
-            f"**方向质量门槛**：{direction_quality_text(votes)}",
-            f"**反向审计**：{counter_audit_text(side, votes)}",
+            f"**各维度证据**：{evidence_summary_text(votes)}",
+            f"**反向审计**：{counter_evidence_text(votes)}",
             "",
             "### 历史轨迹复盘",
             f"- 最近主导手法：{pattern}",
@@ -359,7 +337,7 @@ def build_report(data: Dict[str, Any]) -> str:
             "- 主导叙事：现金指数默认以风险偏好和利率环境解读",
             f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
             "",
-            "### 七维主判断",
+            "### 各维度证据",
             f"- 技术面：当前价 {last:.2f}",
             "- 市场结构：用指数与 ETF 交叉看风险偏好",
             "- 主导力量：以利率、权重股和大盘广度为主",
@@ -372,22 +350,9 @@ def build_report(data: Dict[str, Any]) -> str:
         ])
     else:
         lines.insert(0, f"## 🎯 {data['symbol']} 美股交易决策")
-        emoji = "🟢 做多" if side == "做多" else "🔴 做空" if side == "做空" else "⚪ 观望"
-        if side == "做多":
-            sl = support * 0.997
-            tp1 = resistance
-            tp2 = resistance * 1.02
-            tp3 = resistance * 1.04
-            reason = "结构偏多，且大盘/利率背景未明显反向"
-        elif side == "做空":
-            sl = resistance * 1.003
-            tp1 = support
-            tp2 = support * 0.98
-            tp3 = support * 0.96
-            reason = "结构偏空，且风险偏好未明显修复"
-        else:
-            sl = tp1 = tp2 = tp3 = None
-            reason = "结构与市场背景不够一致" if not gaps and structure["stance"] != "结构模糊" else "关键结构或关键数据不够清晰，按规则降级为观望"
+        emoji = "由 AI 综合判断"
+        sl = tp1 = tp2 = tp3 = None
+        reason = "由 AI 综合判断"
         lines.extend([
             f"### 方向：{emoji}",
             "",
@@ -395,8 +360,8 @@ def build_report(data: Dict[str, Any]) -> str:
             f"**数据完整性**：{completeness}",
             "**宏观时效性**：若处于盘前/盘后，个股与ETF价格波动仅作弱确认，常规时段信号优先",
             f"**市场背景**：{driver_summary(data)}",
-            f"**方向质量门槛**：{direction_quality_text(votes)}",
-            f"**反向审计**：{counter_audit_text(side, votes)}",
+            f"**各维度证据**：{evidence_summary_text(votes)}",
+            f"**反向审计**：{counter_evidence_text(votes)}",
             "",
             "### 历史轨迹复盘",
             f"- 最近 `30D 4H` 主导手法：{pattern}",
@@ -416,7 +381,7 @@ def build_report(data: Dict[str, Any]) -> str:
             "- 主导叙事：公司事件、行业主线和利率敏感性",
             f"- 交叉验证：可用代理 {', '.join(sorted(k for k, v in data.get('proxies', {}).items() if v)) or '无'}",
             "",
-            "### 七维主判断",
+            "### 各维度证据",
             f"- 技术面：当前价 {last:.2f}",
             "- 市场结构：看 ETF、行业轮动和盘前盘后风险",
             f"- 主导力量：公司事件、行业主线和利率敏感性；{company_event_summary(data)}",
@@ -426,7 +391,7 @@ def build_report(data: Dict[str, Any]) -> str:
             "",
             "### 💰 止盈止损计划",
         ])
-        if side == "观望":
+        if side is None:
             lines.extend([
                 "- 当前不追，等待更清晰的结构回踩/反抽",
                 "- `SL/TP` 暂不建议强行给出执行位",
@@ -445,7 +410,7 @@ def build_report(data: Dict[str, Any]) -> str:
                 f"| 🟢 TP3 | 40% | {tp3:.2f} | 扩展目标 |",
             ])
         lines.extend(["", "### 移动止损"])
-        if side == "观望":
+        if side is None:
             lines.append("- 观望阶段不设置移动止损")
         else:
             lines.extend([
@@ -454,25 +419,25 @@ def build_report(data: Dict[str, Any]) -> str:
                 "- 创出新高/新低后，跟踪最近 2 根 4H 结构位",
             ])
         lines.extend(["", "### 仓位"])
-        if side == "观望":
+        if side is None:
             lines.append("- 当前以等待为主，不建议按强方向建仓")
         else:
             lines.append("- 风险金额 ÷ |入场价 - SL| = 可开股数")
         lines.extend(["", "### 失效条件"])
-        if side == "做多":
+        if side is None:
+            lines.extend([
+                "1. 等待更清晰的结构位",
+                "2. 等待事件窗口过去再评估",
+            ])
+        elif side == "做多":
             lines.extend([
                 f"1. 4H 收盘跌破 {support:.2f} 并未快速收回",
                 "2. 利率与风险偏好同步转坏，破坏当前逻辑",
             ])
-        elif side == "做空":
+        else:
             lines.extend([
                 f"1. 4H 收盘重新站上 {resistance:.2f}",
                 "2. 大盘与行业主线同步修复，破坏空头逻辑",
-            ])
-        else:
-            lines.extend([
-                "1. 等待更清晰的结构位",
-                "2. 等待事件窗口过去再评估",
             ])
         lines.extend(["", "### 禁止事项"])
         lines.extend([
