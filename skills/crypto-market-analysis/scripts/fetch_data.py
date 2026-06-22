@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """加密货币八维分析数据采集脚本。用法: python3 fetch_data.py <coin_id> [blocks]
-blocks: all | resolve | price | klines | chain | contracts | sentiment | macro | news | exchanges | options | direction
+blocks: all | resolve | price | klines | chain | contracts | sentiment | macro | news | exchanges | options | raw
 多个block用逗号分隔，如: python3 fetch_data.py bitcoin price,contracts,macro
+
+说明：
+- 各 block 函数采集原始数据，不做方向判断或投票
+- raw block 输出完整的 JSON 原始数据，由 AI 综合分析
 
 并发策略：
 - Binance组: 全并行（1200 req/min限制远超用量）
@@ -1377,216 +1381,11 @@ def _crypto_dimension(reason):
         return '链上/基本面'
     return '其他'
 
-
-def _dimensionize_votes(votes, classifier):
-    buckets = {}
-    for side in ('做多', '做空'):
-        for reason in votes.get(side, []):
-            bucket = classifier(reason)
-            buckets.setdefault(bucket, {'做多': [], '做空': []})[side].append(reason)
-
-    collapsed = {
-        '做多': [],
-        '做空': [],
-        'neutral': list(votes.get('neutral', [])),
-        'veto': list(votes.get('veto', [])),
-        'veto_long': list(votes.get('veto_long', [])),
-        'veto_short': list(votes.get('veto_short', [])),
-        'missing': list(votes.get('missing', [])),
-        'dimensions': {},
-    }
-    for name, sides in buckets.items():
-        long_reasons = sides['做多']
-        short_reasons = sides['做空']
-        if long_reasons and not short_reasons:
-            collapsed['做多'].append(f"{name}: {'；'.join(long_reasons)}")
-            collapsed['dimensions'][name] = {'stance': '做多', 'reasons': long_reasons}
-        elif short_reasons and not long_reasons:
-            collapsed['做空'].append(f"{name}: {'；'.join(short_reasons)}")
-            collapsed['dimensions'][name] = {'stance': '做空', 'reasons': short_reasons}
-        else:
-            reason = '多空内部冲突：多(' + '；'.join(long_reasons) + ') / 空(' + '；'.join(short_reasons) + ')'
-            collapsed['neutral'].append(f'{name}: {reason}')
-            collapsed['dimensions'][name] = {'stance': '中性', 'reasons': long_reasons + short_reasons}
-    return collapsed
-
-
-def _contract_votes(data, votes):
-    contracts = data.get('contracts') or {}
-    if not contracts:
-        votes['missing'].append('合约结构')
-        return
-    price_chg = _to_float(contracts.get('price_change_pct_24h'))
-    oi_chg = _to_float(contracts.get('oi_60m_change_pct'))
-    funding = _to_float(contracts.get('latest_funding_rate'))
-    ls_ratio = _to_float(contracts.get('latest_long_short_ratio'))
-
-    if price_chg is not None and oi_chg is not None:
-        if price_chg > 1.0 and oi_chg > 0.3:
-            votes['做多'].append(f'合约增仓上涨 price={price_chg:+.2f}% OI={oi_chg:+.2f}%')
-        elif price_chg < -1.0 and oi_chg > 0.3:
-            votes['做空'].append(f'合约增仓下跌 price={price_chg:+.2f}% OI={oi_chg:+.2f}%')
-        elif abs(oi_chg) <= 0.3:
-            votes['neutral'].append(f'OI横盘 {oi_chg:+.2f}%')
-        else:
-            votes['neutral'].append(f'OI与价格未形成趋势确认 price={price_chg:+.2f}% OI={oi_chg:+.2f}%')
-
-    if funding is not None:
-        if funding >= 0.0003:
-            votes['veto_long'].append(f'资金费率 {funding * 100:+.4f}% 多头拥挤，禁止追多')
-        elif funding <= -0.0003:
-            votes['veto_short'].append(f'资金费率 {funding * 100:+.4f}% 空头拥挤，禁止追空')
-        elif funding > 0.00008:
-            votes['neutral'].append(f'资金费率偏正 {funding * 100:+.4f}%')
-        elif funding < -0.00008:
-            votes['neutral'].append(f'资金费率偏负 {funding * 100:+.4f}%')
-
-    if ls_ratio is not None:
-        if ls_ratio >= 2.5:
-            votes['veto_long'].append(f'多空比 {ls_ratio:.2f} 多头极端，禁止追多')
-        elif ls_ratio <= 0.7:
-            votes['veto_short'].append(f'多空比 {ls_ratio:.2f} 空头极端，禁止追空')
-        elif 1.2 <= ls_ratio <= 1.8:
-            votes['做多'].append(f'多空比 {ls_ratio:.2f} 温和偏多')
-        elif 0.8 <= ls_ratio <= 0.95:
-            votes['做空'].append(f'多空比 {ls_ratio:.2f} 温和偏空')
-
-
-def _macro_votes(data, votes):
-    macro = data.get('macro') or {}
-    if not macro:
-        votes['missing'].append('宏观/风险偏好')
-        return
-    spy_5d = _to_float(macro.get('spy_5d_change_pct'))
-    vix_price = _to_float(macro.get('vix_price'))
-    dxy_chg = _to_float(macro.get('dxy_change_pct'))
-    btc_5d = _to_float(macro.get('asset_5d_change_pct'))
-
-    if spy_5d is not None:
-        if spy_5d > 1:
-            votes['做多'].append(f'SPY 5日 {spy_5d:+.2f}% 风险偏好修复')
-        elif spy_5d < -1:
-            votes['做空'].append(f'SPY 5日 {spy_5d:+.2f}% 风险偏好走弱')
-    if vix_price is not None:
-        if vix_price >= 25:
-            votes['做空'].append(f'VIX={vix_price:.2f} 风险厌恶')
-        elif vix_price <= 15:
-            votes['做多'].append(f'VIX={vix_price:.2f} 波动率低位')
-    if dxy_chg is not None:
-        if dxy_chg > 0.5:
-            votes['做空'].append(f'DXY走强 {dxy_chg:+.2f}% 压制风险资产')
-        elif dxy_chg < -0.5:
-            votes['做多'].append(f'DXY走弱 {dxy_chg:+.2f}% 支撑风险资产')
-    if btc_5d is not None:
-        if btc_5d > 3:
-            votes['做多'].append(f'BTC 5日 {btc_5d:+.2f}% 内部风险偏好走强')
-        elif btc_5d < -3:
-            votes['做空'].append(f'BTC 5日 {btc_5d:+.2f}% 内部风险偏好走弱')
-
-
-def _news_votes(data, votes):
-    news = data.get('news') or {}
-    bullish = news.get('bullish') or []
-    bearish = news.get('bearish') or []
-    if not news:
-        votes['missing'].append('新闻/事件基本面')
-        return
-    if bullish and not bearish:
-        votes['做多'].append('新闻/事件偏多：' + '；'.join(item.get('title', '') for item in bullish[:3]))
-    elif bearish and not bullish:
-        votes['做空'].append('新闻/事件偏空：' + '；'.join(item.get('title', '') for item in bearish[:3]))
-    elif bullish and bearish:
-        votes['neutral'].append(
-            f"新闻/事件多空混合：偏多{len(bullish)}条 / 偏空{len(bearish)}条"
-        )
-    else:
-        votes['neutral'].append('新闻/事件未发现明确 ETF/监管/机构方向信号')
-
-
-def directional_evidence(data):
-    votes = {
-        '做多': [],
-        '做空': [],
-        'neutral': [],
-        'veto': [],
-        'veto_long': [],
-        'veto_short': [],
-        'missing': [],
-    }
-
-    daily = data.get('daily') or data.get('daily_90d') or []
-    h4 = data.get('h4') or data.get('agg_4h_30d') or data.get('agg_4h_10d') or []
-    daily_rows = _normalize_kline_rows(daily)
-    h4_rows = _normalize_kline_rows(h4)
-    if len(daily_rows) < 20 or len(h4_rows) < 8:
-        votes['missing'].append('技术结构')
-    else:
-        tech = _crypto_price_bias(daily_rows, h4_rows)
-        if tech in {'做多', '做空'}:
-            votes[tech].append(f'技术结构={tech}')
-        else:
-            votes['neutral'].append('技术结构=震荡/无方向优势')
-
-    pattern = _crypto_pattern(h4_rows)
-    if pattern == '趋势推进':
-        votes['做多'].append('4H主导手法=趋势推进')
-    elif pattern in {'冲高派发', '阴跌磨人'}:
-        votes['做空'].append(f'4H主导手法={pattern}')
-    elif pattern in {'箱体洗盘', '跌破回收'}:
-        votes['neutral'].append(f'4H主导手法={pattern}')
-
-    arch = _crypto_market_architecture(h4_rows)
-    if arch['stance'] in {'做多', '做空'}:
-        votes[arch['stance']].append(arch['reason'])
-    elif arch['kind'] != '数据不足':
-        votes['neutral'].append(arch['reason'])
-
-    _contract_votes(data, votes)
-    _news_votes(data, votes)
-    _macro_votes(data, votes)
-
-    sentiment = data.get('sentiment') or {}
-    fng = _to_float(sentiment.get('fear_greed'))
-    if fng is not None:
-        if fng >= 80:
-            votes['veto_long'].append(f'恐惧贪婪={fng:.0f} 极端贪婪，禁止追多')
-        elif fng <= 20:
-            votes['veto_short'].append(f'恐惧贪婪={fng:.0f} 极端恐惧，禁止追空')
-        elif fng < 35:
-            votes['做多'].append(f'恐惧贪婪={fng:.0f} 偏恐惧，反指偏多')
-        elif fng > 65:
-            votes['做空'].append(f'恐惧贪婪={fng:.0f} 偏贪婪，反指偏空')
-    else:
-        votes['missing'].append('情绪反指')
-
-    exchanges = data.get('exchanges') or {}
-    spread = _to_float(exchanges.get('spread_pct'))
-    if spread is not None:
-        if spread >= 0.2:
-            votes['veto'].append(f'交易所价差 {spread:.3f}% 偏离过大，禁止硬给方向')
-        else:
-            votes['neutral'].append(f'交易所价差 {spread:.3f}% 正常')
-
-    options = data.get('options') or {}
-    pcr = _to_float(options.get('put_call_ratio'))
-    if pcr is not None:
-        if pcr > 1.2:
-            votes['做空'].append(f'期权 Put/Call={pcr:.2f} 看跌需求占优')
-        elif pcr < 0.8:
-            votes['做多'].append(f'期权 Put/Call={pcr:.2f} 看涨需求占优')
-        else:
-            votes['neutral'].append(f'期权 Put/Call={pcr:.2f} 中性')
-
-    chain = data.get('chain') or {}
-    avg_tx_btc = _to_float(chain.get('avg_tx_btc'))
-    if avg_tx_btc is not None:
-        if avg_tx_btc >= 5:
-            votes['neutral'].append(f'链上大额转账活跃 avg={avg_tx_btc:.1f} BTC，需结合交易所流向')
-        else:
-            votes['neutral'].append(f'链上活跃度未见强方向 avg={avg_tx_btc:.1f} BTC')
-
-    return _dimensionize_votes(votes, _crypto_dimension)
-
+# ─── REMOVED: _dimensionize_votes ───
+# ─── REMOVED: _contract_votes ───
+# ─── REMOVED: _macro_votes ───
+# ─── REMOVED: _news_votes ───
+# ─── REMOVED: directional_evidence ───
 
 def _optional_fetch(url, timeout=10):
     try:
@@ -1728,41 +1527,12 @@ def collect_direction_snapshot(coin_id):
     }
 
 
-def block_direction_gate(coin_id):
-    print('=== 多维证据清单（方向由 AI 综合判断） ===')
+def block_raw_data(coin_id):
+    """输出原始 JSON 数据，不做任何方向分类或投票判断。由 AI 基于原始数据自行分析。"""
+    import json
     data = collect_direction_snapshot(coin_id)
-    evidence = directional_evidence(data)
-
-    dimensions = evidence.get('dimensions', {})
-    if dimensions:
-        print('各维度证据：')
-        for name, info in dimensions.items():
-            stance = info.get('stance', '中性')
-            reasons = '；'.join(info.get('reasons', []))
-            print(f'  [{stance}] {name}：{reasons}')
-
-    neutral = evidence.get('neutral', [])
-    if neutral:
-        print('中性维度：')
-        for item in neutral:
-            print(f'  {item}')
-
-    for key, label in (('veto', '硬性约束（禁止硬给方向）'),
-                       ('veto_long', '禁止追多'),
-                       ('veto_short', '禁止追空')):
-        items = evidence.get(key, [])
-        if items:
-            print(f'{label}：')
-            for item in items:
-                print(f'  {item}')
-
-    missing = evidence.get('missing', [])
-    if missing:
-        print('数据缺失：')
-        for item in missing:
-            print(f'  {item}')
-
-    print('说明：以上为采集的结构化证据，不包含方向决策。请基于各维度证据综合判断方向；证据不足或冲突时，观望/震荡是合法且优先的结论。')
+    print('=== 原始数据 JSON（方向由 AI 综合判断） ===')
+    print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 # ─── 主入口 ───
@@ -1770,13 +1540,13 @@ BLOCKS = {
     'resolve': block_resolve, 'price': block_price, 'klines': block_klines,
     'chain': block_chain, 'contracts': block_contracts, 'exchanges': block_exchanges,
     'sentiment': block_sentiment, 'macro': block_macro, 'news': block_news,
-    'direction': block_direction_gate, 'options': block_options,
+    'raw': block_raw_data, 'options': block_options,
 }
 
 # 按数据源分组（同源串行避免限流，异源并行加速）
 SOURCE_GROUPS = {
     'binance': ['klines', 'contracts', 'price', 'exchanges'],  # 全并行，限制宽松
-    'yahoo': ['news', 'macro', 'direction'],      # direction 内含新闻/Yahoo，串行避免限流
+    'yahoo': ['news', 'macro', 'raw'],      # raw 内含新闻/Yahoo，串行避免限流
     'other': ['resolve', 'chain', 'sentiment', 'options'],  # 全并行
 }
 
