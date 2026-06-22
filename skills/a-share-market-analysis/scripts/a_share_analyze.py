@@ -253,20 +253,6 @@ def score_breakdown(data: Dict[str, Any]) -> Dict[str, int]:
     return scores
 
 
-def direction_from_score(score: int, status_text: str) -> str:
-    if "休市" in status_text:
-        if score >= 2:
-            return "偏多"
-        if score <= -2:
-            return "偏空"
-        return "震荡"
-    if score >= 2:
-        return "偏多"
-    if score <= -2:
-        return "偏空"
-    return "震荡"
-
-
 def evidence_summary_text(scores: Dict[str, int]) -> str:
     """逐项列出各维度证据，不做方向决策。"""
     positive = [name for name, value in scores.items() if value > 0]
@@ -298,7 +284,6 @@ def render_report(data: Dict[str, Any]) -> str:
     pattern = classify_pattern(sh_rows)
     today_type = "假期/盘后观察" if "休市" in status_text else classify_today(sh_rows)
     scores = score_breakdown(data)
-    score = sum(scores.values())
     direction = None
     industry_rows = data.get("board_flows", {}).get("industry", {}).get("rows", [])
     concept_rows = data.get("board_flows", {}).get("concept", {}).get("rows", [])
@@ -385,9 +370,7 @@ def render_report(data: Dict[str, Any]) -> str:
     lines.append("- 方向：由 AI 综合判断")
     lines.append(f"- 各维度证据：{evidence_summary_text(scores)}")
     lines.append(f"- 反向审计：{counter_evidence_text(scores)}")
-    lines.append(f"- 内部评分：{score:+d}")
-    lines.append(f"- 分项评分：技术{scores['technical']:+d} / 北向{scores['northbound']:+d} / 广度{scores['breadth']:+d} / 板块{scores['boards']:+d} / 宏观{scores['macro']:+d}" + (f" / 个股{scores['stock']:+d}" if stock else ""))
-    lines.append("- 风险提示：A 股为 T+1，当前分析更适合次日预判；节假日/休市期间的‘实时资金’默认降权处理。")
+    lines.append("- 风险提示：A 股为 T+1，当前分析更适合次日预判；节假日/休市期间的'实时资金'默认降权处理。")
     lines.append("")
     lines.append("### ⚠️ 免责声明")
     lines.append("以上分析基于公开数据，不构成投资建议。A 股有风险，投资需谨慎。")

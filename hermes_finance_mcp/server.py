@@ -22,13 +22,15 @@ SERVER_INSTRUCTIONS = (
     "dimension 8 technical confirmation rather than the primary decision layer. "
     "For every market, do not return a quick market summary: fetch full data, "
     "run CZSC when K-lines are available, then output eight dimensions, "
-    "seven-dimension main judgment, direction quality gate, counter-direction "
-    "audit, CZSC confirmation, final direction, scenarios, and invalidation "
-    "levels. If CZSC is unavailable for a market, "
-    "mark dimension 8 as insufficient and downgrade confidence. Never use CZSC "
-    "score alone as the final stance; dimensions 1-7 must define the main thesis "
-    "first. Do not force a directional call: 观望/震荡/无方向优势 is the correct "
-    "final direction whenever evidence is mixed, stale, incomplete, or contradicted."
+    "per-dimension evidence, direction rationale, counter-direction audit, "
+    "CZSC confirmation, final direction, scenarios, and invalidation levels. "
+    "Direction must be synthesized by the AI from evidence strength across "
+    "dimensions 1-7; do not use voting counts or weighted scoring to decide "
+    "direction. If CZSC is unavailable for a market, mark dimension 8 as "
+    "insufficient and downgrade confidence. Never use CZSC score alone as the "
+    "final stance; dimensions 1-7 must define the main thesis first. Do not "
+    "force a directional call: 观望/震荡/无方向优势 is the correct final "
+    "direction whenever evidence is mixed, stale, incomplete, or contradicted."
 )
 
 
