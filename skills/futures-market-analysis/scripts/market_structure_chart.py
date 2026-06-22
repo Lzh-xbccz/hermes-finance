@@ -12,6 +12,8 @@ from pathlib import Path
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+# 复用 crypto skill 的 K 线架构识别函数（_crypto_market_architecture 等）。
+# 这些函数是图表渲染的核心逻辑，两市场共享同一套架构识别算法。
 CRYPTO_SCRIPT_DIR = SCRIPT_DIR.parents[1] / "crypto-market-analysis" / "scripts"
 for path in (SCRIPT_DIR, CRYPTO_SCRIPT_DIR):
     if str(path) not in sys.path:

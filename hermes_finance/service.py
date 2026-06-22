@@ -10,7 +10,7 @@ from .paths import PROJECT_ROOT, project_path
 from .routing import classify, normalize_market
 from .runner import parse_json_output, run_python_script
 from .czsc_adapter import analyze_market_klines
-from .freq_presets import get_freqs, get_mode_label, TRADING_MODE, FREQ_PRESETS
+from .freq_presets import get_freqs
 
 
 MARKET_SCRIPT = {
@@ -51,6 +51,33 @@ COIN_SYMBOL_ALIASES = {
     "toncoin": "TON",
     "ton": "TON",
     "sui": "SUI",
+    "matic-network": "POL",
+    "polygon": "POL",
+    "pol": "POL",
+    "uniswap": "UNI",
+    "uni": "UNI",
+    "aptos": "APT",
+    "apt": "APT",
+    "arbitrum": "ARB",
+    "arb": "ARB",
+    "optimism": "OP",
+    "op": "OP",
+    "near": "NEAR",
+    "near-protocol": "NEAR",
+    "filecoin": "FIL",
+    "fil": "FIL",
+    "cosmos": "ATOM",
+    "atom": "ATOM",
+    "stellar": "XLM",
+    "xlm": "XLM",
+    "hedera": "HBAR",
+    "hbar": "HBAR",
+    "injective-protocol": "INJ",
+    "injective": "INJ",
+    "inj": "INJ",
+    "pepe": "PEPE",
+    "shiba-inu": "SHIB",
+    "shib": "SHIB",
 }
 
 FUTURES_SYMBOL_ALIASES = {

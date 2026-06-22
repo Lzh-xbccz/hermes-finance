@@ -21,7 +21,6 @@ from typing import Any, Dict, List
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from shared_ta import (
-    classify_pattern as _classify_pattern,
     classify_today as _classify_today,
 )
 

@@ -4,9 +4,20 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys as _sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+_sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from shared_ta import (
+    classify_pattern as _classify_pattern,
+    classify_today as _classify_today,
+    find_swings,
+    structure_basis,
+    recent_key_actions as _recent_key_actions,
+    structure_levels,
+    shape_text,
+)
 
 FETCHER = Path(__file__).resolve().parent / "futures_fetch.py"
 BINANCE_TRADFI_EXPECTED = {"CL", "BZ", "GC", "SI", "HG", "NG", "PL", "PA"}
@@ -30,108 +41,17 @@ def fetch_live(symbol: str) -> Dict[str, Any]:
     return json.loads(proc.stdout)
 
 
+# ── 期货专用参数（委托给 shared_ta）──
 def classify_pattern(rows: List[Dict[str, Any]]) -> str:
-    if len(rows) < 12:
-        return "数据不足"
-    closes = [r["close"] for r in rows]
-    highs = [r["high"] for r in rows]
-    lows = [r["low"] for r in rows]
-    chg = (closes[-1] / closes[0] - 1) * 100 if closes[0] else 0
-    recent = (closes[-1] / closes[-6] - 1) * 100 if closes[-6] else 0
-    width = (max(highs) - min(lows)) / min(lows) * 100 if min(lows) else 0
-    if abs(chg) < 4 and width < 10:
-        return "箱体洗盘"
-    if chg > 5 and recent > 1:
-        return "趋势推进"
-    if chg > 5 and recent < 0:
-        return "冲高派发"
-    if closes[-1] > min(lows[-6:]) * 1.02 and min(lows[-3:]) <= min(lows[-6:]) * 1.003:
-        return "跌破回收"
-    return "阴跌磨人"
-
+    return _classify_pattern(rows, box_chg_pct=4, box_width_pct=10, trend_chg_pct=5, trend_recent_pct=1, recovery_pct=2)
 
 def classify_today(rows: List[Dict[str, Any]]) -> str:
-    if len(rows) < 8:
-        return "数据不足"
-    closes = [r["close"] for r in rows]
-    highs = [r["high"] for r in rows]
-    lows = [r["low"] for r in rows]
-    latest = closes[-1]
-    prev = closes[-2]
-    if latest >= max(highs[-6:]) * 0.998:
-        return "延续"
-    if latest > prev and latest > min(lows[-6:]) * 1.01:
-        return "回踩"
-    if latest < prev and latest > min(lows[-6:]) * 1.01:
-        return "诱多"
-    if latest < min(lows[-6:]) * 0.995:
-        return "诱空"
-    return "纯噪音"
-
+    return _classify_today(rows, continuation_ratio=0.998, bounce_ratio=1.01, breakdown_ratio=0.995)
 
 def recent_key_actions(rows: List[Dict[str, Any]]) -> List[str]:
-    if not rows:
-        return ["数据不足"]
-    events = []
-    for row in rows[-12:]:
-        o = row["open"]
-        c = row["close"]
-        h = row["high"]
-        l = row["low"]
-        body = ((c - o) / o * 100) if o else 0.0
-        rng = ((h - l) / o * 100) if o else 0.0
-        if abs(body) >= 1.0 or rng >= 2.0:
-            if body > 0.8:
-                tag = "急拉"
-            elif body < -0.8:
-                tag = "急跌"
-            elif rng >= 2.5 and c < h - (h - l) * 0.4:
-                tag = "冲高回落"
-            elif rng >= 2.5 and c > l + (h - l) * 0.6:
-                tag = "跌破回收"
-            else:
-                tag = "大波动"
-            events.append((abs(body) + rng, f"{row['time_utc']} {tag} body:{body:+.2f}% range:{rng:.2f}%"))
-    events.sort(reverse=True)
-    return [text for _, text in events[:3]] or ["最近 12 根 4H 未出现显著异常波动"]
+    return _recent_key_actions(rows, body_threshold=1.0, range_threshold=2.0)
 
-
-def find_swings(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    highs: List[Dict[str, Any]] = []
-    lows: List[Dict[str, Any]] = []
-    for i in range(2, len(rows) - 2):
-        if rows[i]["high"] > rows[i - 1]["high"] and rows[i]["high"] > rows[i - 2]["high"] and rows[i]["high"] > rows[i + 1]["high"] and rows[i]["high"] > rows[i + 2]["high"]:
-            highs.append(rows[i])
-        if rows[i]["low"] < rows[i - 1]["low"] and rows[i]["low"] < rows[i - 2]["low"] and rows[i]["low"] < rows[i + 1]["low"] and rows[i]["low"] < rows[i + 2]["low"]:
-            lows.append(rows[i])
-    return {"highs": highs, "lows": lows}
-
-
-def structure_basis(rows: List[Dict[str, Any]]) -> Dict[str, str]:
-    swings = find_swings(rows)
-    highs = swings["highs"]
-    lows = swings["lows"]
-    if len(lows) >= 2 and lows[-1]["low"] > lows[-2]["low"]:
-        stance = "higher low"
-        detail = f"最近结构摆点为 higher low：{lows[-2]['low']:.2f} -> {lows[-1]['low']:.2f}（{lows[-1]['time_utc']}）"
-    elif len(highs) >= 2 and highs[-1]["high"] < highs[-2]["high"]:
-        stance = "lower high"
-        detail = f"最近结构摆点为 lower high：{highs[-2]['high']:.2f} -> {highs[-1]['high']:.2f}（{highs[-1]['time_utc']}）"
-    else:
-        stance = "结构模糊"
-        detail = "最近 4H 摆点未形成清晰 higher low 或 lower high"
-    return {"stance": stance, "detail": detail}
-
-
-def shape_text(pattern: str) -> str:
-    mapping = {
-        "趋势推进": "趋势延续结构",
-        "箱体洗盘": "区间震荡结构",
-        "冲高派发": "高位回落结构",
-        "跌破回收": "假跌破回收结构",
-        "阴跌磨人": "弱反弹下行结构",
-    }
-    return mapping.get(pattern, "结构待确认")
+# find_swings / structure_basis / shape_text / structure_levels → 直接使用 shared_ta 版本
 
 
 def volume_state(rows: List[Dict[str, Any]]) -> str:
