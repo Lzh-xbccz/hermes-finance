@@ -252,29 +252,17 @@ def score_breakdown(data: Dict[str, Any]) -> Dict[str, int]:
     return scores
 
 
-def evidence_summary_text(scores: Dict[str, int]) -> str:
-    """逐项列出各维度证据，不做方向决策。"""
-    positive = [name for name, value in scores.items() if value > 0]
-    negative = [name for name, value in scores.items() if value < 0]
-    neutral = [name for name, value in scores.items() if value == 0]
-    return (
-        f"偏多维度 {len(positive)} 项：{'; '.join(positive) or '无'}；"
-        f"偏空维度 {len(negative)} 项：{'; '.join(negative) or '无'}；"
-        f"中性/缺失：{'; '.join(neutral) or '无'}"
-    )
+def evidence_summary_text(data: Dict[str, Any]) -> str:
+    """输出原始数据摘要，不做证据分类。方向由 AI 综合判断。"""
+    return f"原始数据已采集，包含 {len(data)} 个字段；详情见完整 JSON 输出"
 
 
-def counter_evidence_text(scores: Dict[str, int]) -> str:
-    """列出最强反方向证据，不做方向决策。"""
-    positive = [name for name, value in scores.items() if value > 0]
-    negative = [name for name, value in scores.items() if value < 0]
-    if positive and negative:
-        return f"最强空头证据：{'; '.join(negative)}；最强多头证据：{'; '.join(positive)}"
-    if positive:
-        return f"无同等级反证；多头证据：{'; '.join(positive)}"
-    if negative:
-        return f"无同等级反证；空头证据：{'; '.join(negative)}"
-    return '多空均无强证据'
+def counter_evidence_text(data: Dict[str, Any]) -> str:
+    """列出数据可用性，不做反向判断。方向由 AI 综合判断。"""
+    missing = [k for k, v in data.items() if v is None or v == []]
+    if missing:
+        return f"数据可用性：完整；缺失项：{', '.join(missing)}"
+    return "数据可用性：完整"
 
 
 def render_report(data: Dict[str, Any]) -> str:
@@ -367,8 +355,8 @@ def render_report(data: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("### 🎯 综合研判")
     lines.append("- 方向：由 AI 综合判断")
-    lines.append(f"- 各维度证据：{evidence_summary_text(scores)}")
-    lines.append(f"- 反向审计：{counter_evidence_text(scores)}")
+    lines.append(f"- 各维度证据：{evidence_summary_text(data)}")
+    lines.append(f"- 反向审计：{counter_evidence_text(data)}")
     lines.append("- 风险提示：A 股为 T+1，当前分析更适合次日预判；节假日/休市期间的'实时资金'默认降权处理。")
     lines.append("")
     lines.append("### ⚠️ 免责声明")

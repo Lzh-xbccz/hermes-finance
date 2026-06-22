@@ -130,133 +130,23 @@ def _us_equity_dimension(reason: str) -> str:
         return "公司事件"
     return "其他"
 
-
-def _dimensionize_votes(votes: Dict[str, List[str]], classifier) -> Dict[str, List[str]]:
-    buckets: Dict[str, Dict[str, List[str]]] = {}
-    for side in ("做多", "做空"):
-        for reason in votes.get(side, []):
-            bucket = classifier(reason)
-            buckets.setdefault(bucket, {"做多": [], "做空": []})[side].append(reason)
-
-    collapsed: Dict[str, Any] = {
-        "做多": [],
-        "做空": [],
-        "neutral": list(votes.get("neutral", [])),
-        "veto": list(votes.get("veto", [])),
-        "dimensions": {},
-    }
-    for name, sides in buckets.items():
-        long_reasons = sides["做多"]
-        short_reasons = sides["做空"]
-        if long_reasons and not short_reasons:
-            collapsed["做多"].append(f"{name}: {'；'.join(long_reasons)}")
-            collapsed["dimensions"][name] = {"stance": "做多", "reasons": long_reasons}
-        elif short_reasons and not long_reasons:
-            collapsed["做空"].append(f"{name}: {'；'.join(short_reasons)}")
-            collapsed["dimensions"][name] = {"stance": "做空", "reasons": short_reasons}
-        else:
-            reason = "多空内部冲突：多(" + "；".join(long_reasons) + ") / 空(" + "；".join(short_reasons) + ")"
-            collapsed["neutral"].append(f"{name}: {reason}")
-            collapsed["dimensions"][name] = {"stance": "中性", "reasons": long_reasons + short_reasons}
-    return collapsed
-
-
-def directional_evidence(data: Dict[str, Any]) -> Dict[str, List[str]]:
-    votes: Dict[str, List[str]] = {"做多": [], "做空": [], "veto": [], "neutral": []}
-    technical = direction(data)
-    if technical in {"做多", "做空", "偏多", "偏空"}:
-        normalized = "做多" if technical in {"做多", "偏多"} else "做空"
-        votes[normalized].append(f"技术结构={technical}")
-
-    pattern = classify_pattern(data.get("agg_4h_10d") or data.get("daily_90d", []))
-    if pattern == "趋势推进":
-        votes["做多"].append("主导手法=趋势推进")
-    elif pattern in {"冲高派发", "阴跌磨人"}:
-        votes["做空"].append(f"主导手法={pattern}")
-    elif pattern in {"箱体洗盘", "跌破回收"}:
-        votes["neutral"].append(f"主导手法={pattern}")
-
-    vix_price = _proxy_price(data, "^VIX")
-    vix_chg = _proxy_change(data, "^VIX")
-    tnx_chg = _proxy_change(data, "^TNX")
-    spy_chg = _proxy_change(data, "SPY")
-    qqq_chg = _proxy_change(data, "QQQ")
-
-    if vix_price is not None and vix_price >= 25:
-        votes["veto"].append(f"VIX={vix_price:.2f} 偏高，方向质量不足")
-    if vix_chg is not None:
-        if vix_chg > 5:
-            votes["做空"].append(f"VIX上升 {vix_chg:+.2f}%")
-        elif vix_chg < -5:
-            votes["做多"].append(f"VIX下降 {vix_chg:+.2f}%")
-    if tnx_chg is not None:
-        if tnx_chg > 0.50:
-            votes["做空"].append(f"10Y上行 {tnx_chg:+.2f}% 压制权益久期")
-        elif tnx_chg < -0.50:
-            votes["做多"].append(f"10Y下行 {tnx_chg:+.2f}% 支撑估值")
-    for name, chg in {"SPY": spy_chg, "QQQ": qqq_chg}.items():
-        if chg is None:
-            continue
-        if chg > 0.50:
-            votes["做多"].append(f"{name}上涨 {chg:+.2f}%")
-        elif chg < -0.50:
-            votes["做空"].append(f"{name}下跌 {chg:+.2f}%")
-
-    if data.get("instrument_type") == "stock":
-        events = data.get("company_event_proxy", {}).get("events", [])
-        if not events:
-            votes["veto"].append("个股公司事件代理缺失，禁止硬给方向")
-        for event in events[:5]:
-            event_type = event.get("type")
-            title = str(event.get("title", "")).lower()
-            if event_type == "earnings_proxy":
-                if any(token in title for token in ["miss", "cuts", "lower", "weak", "falls"]):
-                    votes["做空"].append(f"公司事件偏空：{event.get('title')}")
-                elif any(token in title for token in ["beat", "raise", "strong", "growth"]):
-                    votes["做多"].append(f"公司事件偏多：{event.get('title')}")
-                else:
-                    votes["neutral"].append(f"公司事件未定向：{event.get('title')}")
-            elif event_type == "regulatory_proxy":
-                votes["做空"].append(f"监管/诉讼风险：{event.get('title')}")
-            elif event_type == "business_proxy":
-                if any(token in title for token in ["delay", "cut", "weak", "risk", "falls", "probe"]):
-                    votes["做空"].append(f"公司业务事件偏空：{event.get('title')}")
-                elif any(token in title for token in ["launch", "contract", "approval", "growth", "strong", "ai", "chip", "product"]):
-                    votes["做多"].append(f"公司业务事件偏多：{event.get('title')}")
-                else:
-                    votes["neutral"].append(f"公司业务事件未定向：{event.get('title')}")
-
-    return _dimensionize_votes(votes, _us_equity_dimension)
-
+# ─── REMOVED: _dimensionize_votes ───
+# ─── REMOVED: directional_evidence ───
 
 def _neutral_direction(data: Dict[str, Any]) -> str:
     return "震荡" if data.get("instrument_type") == "index" else "观望"
 
 
-def evidence_summary_text(votes: Dict[str, List[str]]) -> str:
-    """逐项列出各维度证据，不做方向决策。"""
-    return (
-        f"偏多维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
-        f"偏空维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
-        f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
-        f"硬性降级：{'; '.join(votes['veto']) or '无'}"
-    )
+def evidence_summary_text(data: Dict[str, Any]) -> str:
+    """输出原始数据摘要，不做证据分类。"""
+    return f"原始数据已采集，包含 {len(data)} 个字段；详情见 JSON 输出"
 
-
-def counter_evidence_text(votes: Dict[str, List[str]]) -> str:
-    """列出最强反方向证据，不做方向决策。"""
-    if votes.get('veto'):
-        return '存在硬性降级项：' + '；'.join(votes['veto'])
-    long_reasons = votes['做多']
-    short_reasons = votes['做空']
-    if long_reasons and short_reasons:
-        return f"最强空头证据：{'; '.join(short_reasons)}；最强多头证据：{'; '.join(long_reasons)}"
-    if long_reasons:
-        return f"无同等级反证；多头证据：{'; '.join(long_reasons)}"
-    if short_reasons:
-        return f"无同等级反证；空头证据：{'; '.join(short_reasons)}"
-    return '多空均无强证据'
-
+def counter_evidence_text(data: Dict[str, Any]) -> str:
+    """列出数据可用性，不做反向判断。"""
+    missing = [k for k, v in data.items() if v is None or v == []]
+    if missing:
+        return f"数据可用性：完整；缺失项：{', '.join(missing)}"
+    return "数据可用性：完整"
 
 def driver_summary(data: Dict[str, Any]) -> str:
     proxies = data.get("proxies", {})

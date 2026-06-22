@@ -115,163 +115,19 @@ def _forex_dimension(reason: str) -> str:
         return "CFTC/仓位"
     return "其他"
 
+# ─── REMOVED: _dimensionize_votes ───
+# ─── REMOVED: directional_evidence ───
 
-def _dimensionize_votes(votes: Dict[str, List[str]], classifier) -> Dict[str, List[str]]:
-    buckets: Dict[str, Dict[str, List[str]]] = {}
-    for side in ("做多", "做空"):
-        for reason in votes.get(side, []):
-            bucket = classifier(reason)
-            buckets.setdefault(bucket, {"做多": [], "做空": []})[side].append(reason)
+def evidence_summary_text(data: Dict[str, Any]) -> str:
+    """输出原始数据摘要，不做证据分类。"""
+    return f"原始数据已采集，包含 {len(data)} 个字段；详情见 JSON 输出"
 
-    collapsed: Dict[str, Any] = {
-        "做多": [],
-        "做空": [],
-        "neutral": list(votes.get("neutral", [])),
-        "veto": list(votes.get("veto", [])),
-        "dimensions": {},
-    }
-    for name, sides in buckets.items():
-        long_reasons = sides["做多"]
-        short_reasons = sides["做空"]
-        if long_reasons and not short_reasons:
-            collapsed["做多"].append(f"{name}: {'；'.join(long_reasons)}")
-            collapsed["dimensions"][name] = {"stance": "做多", "reasons": long_reasons}
-        elif short_reasons and not long_reasons:
-            collapsed["做空"].append(f"{name}: {'；'.join(short_reasons)}")
-            collapsed["dimensions"][name] = {"stance": "做空", "reasons": short_reasons}
-        else:
-            reason = "多空内部冲突：多(" + "；".join(long_reasons) + ") / 空(" + "；".join(short_reasons) + ")"
-            collapsed["neutral"].append(f"{name}: {reason}")
-            collapsed["dimensions"][name] = {"stance": "中性", "reasons": long_reasons + short_reasons}
-    return collapsed
-
-
-def directional_evidence(data: Dict[str, Any]) -> Dict[str, List[str]]:
-    """Build conservative evidence for the requested FX pair itself."""
-
-    votes: Dict[str, List[str]] = {"做多": [], "做空": [], "veto": [], "neutral": []}
-    technical = direction(data)
-    if technical in {"做多", "做空"}:
-        votes[technical].append(f"技术结构={technical}")
-
-    pattern = classify_pattern(data.get("agg_4h_10d", []))
-    if pattern == "趋势推进":
-        votes["做多"].append("4H主导手法=趋势推进")
-    elif pattern in {"冲高派发", "阴跌磨人"}:
-        votes["做空"].append(f"4H主导手法={pattern}")
-    elif pattern in {"箱体洗盘", "跌破回收"}:
-        votes["neutral"].append(f"4H主导手法={pattern}")
-
-    symbol = data["symbol"]
-    dxy_chg = _proxy_change(data, "DX-Y.NYB")
-    tnx_chg = _proxy_change(data, "^TNX")
-    vix_chg = _proxy_change(data, "^VIX")
-    rates = data.get("structured_drivers", {}).get("rates", {})
-    diff_signal = str(rates.get("diff_signal", ""))
-
-    usd_base = symbol.startswith("USD") or symbol == "DXY"
-    usd_quote = symbol.endswith("USD") and not usd_base
-
-    def usd_strength_vote(reason: str) -> None:
-        if usd_base:
-            votes["做多"].append(reason)
-        elif usd_quote:
-            votes["做空"].append(reason)
-        else:
-            votes["neutral"].append(reason)
-
-    def usd_weakness_vote(reason: str) -> None:
-        if usd_base:
-            votes["做空"].append(reason)
-        elif usd_quote:
-            votes["做多"].append(reason)
-        else:
-            votes["neutral"].append(reason)
-
-    if dxy_chg is not None:
-        if dxy_chg > 0.20:
-            usd_strength_vote(f"DXY走强 {dxy_chg:+.2f}%")
-        elif dxy_chg < -0.20:
-            usd_weakness_vote(f"DXY走弱 {dxy_chg:+.2f}%")
-
-    if tnx_chg is not None:
-        if tnx_chg > 0.30:
-            usd_strength_vote(f"10Y上行 {tnx_chg:+.2f}%")
-        elif tnx_chg < -0.30:
-            usd_weakness_vote(f"10Y下行 {tnx_chg:+.2f}%")
-
-    if "USD利差优势" in diff_signal:
-        usd_strength_vote(diff_signal)
-    elif "USD利差劣势" in diff_signal:
-        usd_weakness_vote(diff_signal)
-
-    if symbol in {"USDJPY", "USDCHF"} and vix_chg is not None:
-        if vix_chg > 5:
-            votes["做空"].append(f"VIX上升 {vix_chg:+.2f}% 支持避险货币")
-        elif vix_chg < -5:
-            votes["做多"].append(f"VIX下降 {vix_chg:+.2f}% 压低避险需求")
-
-    if symbol in {"AUDUSD", "NZDUSD"} and vix_chg is not None:
-        if vix_chg > 5:
-            votes["做空"].append(f"VIX上升 {vix_chg:+.2f}% 压制风险货币")
-        elif vix_chg < -5:
-            votes["做多"].append(f"VIX下降 {vix_chg:+.2f}% 支撑风险货币")
-
-    events = data.get("upcoming_macro_events") or []
-    high_impact_near = []
-    for event in events:
-        delta = _event_delta_hours(event)
-        if event.get("impact") == "High" and delta is not None and -1 <= delta <= 2:
-            high_impact_near.append(event)
-    if high_impact_near:
-        votes["veto"].append("高影响宏观数据窗口过近，禁止硬给方向")
-
-    cftc_signal = str(data.get("structured_drivers", {}).get("cftc", {}).get("position_signal", ""))
-    if cftc_signal:
-        cftc_market_is_base = usd_quote or symbol == "DXY"
-        cftc_market_is_quote = usd_base and symbol != "DXY"
-        if "🟢" in cftc_signal:
-            if cftc_market_is_base:
-                votes["做多"].append(f"CFTC {cftc_signal}")
-            elif cftc_market_is_quote:
-                votes["做空"].append(f"CFTC 对手货币 {cftc_signal}，压制{symbol}")
-            else:
-                votes["neutral"].append(f"CFTC {cftc_signal}")
-        elif "🔴" in cftc_signal:
-            if cftc_market_is_base:
-                votes["做空"].append(f"CFTC {cftc_signal}")
-            elif cftc_market_is_quote:
-                votes["做多"].append(f"CFTC 对手货币 {cftc_signal}，支撑{symbol}")
-            else:
-                votes["neutral"].append(f"CFTC {cftc_signal}")
-
-    return _dimensionize_votes(votes, _forex_dimension)
-
-
-def evidence_summary_text(votes: Dict[str, List[str]]) -> str:
-    """逐项列出各维度证据，不做方向决策。"""
-    return (
-        f"偏多维度 {len(votes['做多'])} 项：{'; '.join(votes['做多']) or '无'}；"
-        f"偏空维度 {len(votes['做空'])} 项：{'; '.join(votes['做空']) or '无'}；"
-        f"中性/缺失：{'; '.join(votes['neutral']) or '无'}；"
-        f"硬性降级：{'; '.join(votes['veto']) or '无'}"
-    )
-
-
-def counter_evidence_text(votes: Dict[str, List[str]]) -> str:
-    """列出最强反方向证据，不做方向决策。"""
-    if votes['veto']:
-        return '存在硬性降级项：' + '；'.join(votes['veto'])
-    long_reasons = votes['做多']
-    short_reasons = votes['做空']
-    if long_reasons and short_reasons:
-        return f"最强空头证据：{'; '.join(short_reasons)}；最强多头证据：{'; '.join(long_reasons)}"
-    if long_reasons:
-        return f"无同等级反证；多头证据：{'; '.join(long_reasons)}"
-    if short_reasons:
-        return f"无同等级反证；空头证据：{'; '.join(short_reasons)}"
-    return '多空均无强证据'
-
+def counter_evidence_text(data: Dict[str, Any]) -> str:
+    """列出数据可用性，不做反向判断。"""
+    missing = [k for k, v in data.items() if v is None or v == []]
+    if missing:
+        return f"数据可用性：完整；缺失项：{', '.join(missing)}"
+    return "数据可用性：完整"
 
 def macro_summary(data: Dict[str, Any]) -> str:
     """宏观代理摘要：DXY + VIX + 利率曲线 + 利差信号"""
